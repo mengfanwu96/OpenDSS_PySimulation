@@ -1,5 +1,5 @@
 import numpy as np
-
+import re
 # the Bus class uses the circuit instance from the DSS COM object
 # and gets the names, bus voltages, distances from the energy meter,
 # x and y coordinates of the 'from' bus and puts them into numpy arrays
@@ -85,7 +85,7 @@ class Branch:
         V = np.zeros((n,3), dtype=complex)
         Vto = np.zeros((n,3), dtype=complex)
         i = 0
-        for j in range(0,n):
+        for j in range(0, n):
             el = circuit.CktElements(j)
             if not re.search("^Line", el.Name):
                 continue  # only pick lines...
