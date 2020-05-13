@@ -1,134 +1,74 @@
 import numpy as np
 import re
-# the Bus class uses the circuit instance from the DSS COM object
-# and gets the names, bus voltages, distances from the energy meter,
-# x and y coordinates of the 'from' bus and puts them into numpy arrays
-class Bus:
-    def __init__(self, circuit):
-        """
-        Inputs:
-            circuit - DSS COM object
-        Contains:
-            name - string - bus name
-            V - complex array (n x 3) - node bus voltage
-            distance - array (n) - distance from the energymeter
-            x - array (n) - from-bus x location
-            y - array (n) - from-bus y location
-        """
-# n is set to the number of buses in the circuit
-        n = circuit.NumBuses
+import win32com.client
 
-# make the x,y, distance, and voltage numpy arrays of length n and set
-# the vslues to all zeros
-# note:  the voltage array is an array of complex values
-#         x = np.zeros(n)
-#         y = np.zeros(n)
-#         distance = np.zeros(n)
-        V = np.zeros((n,3), dtype=complex)
-        name = np.array("                                ").repeat(n)
+class DSS:
+    def __init__(self, filename=""):
+        self.engine = win32com.client.Dispatch("OpenDSSEngine.DSS")
+        self.engine.Start("0")
 
-# populate the arrays by looking at the each bus in turn from 0 to n
-# note:  by convention all arrays are zero-based in python
-        for i in range(0,n):
-            bus = circuit.Buses(i)
-            name[i] = bus.Name
-            # x[i] = bus.x
-            # y[i] = bus.y
-            # distance[i] = bus.Distance
-            v = np.array(bus.Voltages)
-            nodes = np.array(bus.Nodes)
+# use the Text interface to OpenDSS
+        self.text = self.engine.Text
+        self.text.Command = "clear"
+        self.circuit = self.engine.ActiveCircuit
+        self.solution = self.circuit.Solution
+        self.elem = self.circuit.ActiveCktElement
 
-# we're only interested in the first three nodes
-# (also called terminals) on the bus
-            if nodes.size > 3: nodes = nodes[0:3]
-            cidx = 2 * np.array(range(0, min(v.size // 2, 3)))
-            V[i, nodes-1] = v[cidx] + 1j * v[cidx + 1]
+        print(self.engine.Version)
+
+        if filename != "":
+            self.text.Command = "compile [" + filename + "]"
+
+        self.bus_list = list(self.circuit.AllBusNames)
+        elem_list = self.circuit.AllElementNames
+        self.transformer_dict = {}
+        self.regcontrol_dict = {}
+        self.load_dict = {}
+        self.capacitor_dict = {}
+        self.capcontrol_dict = {}
+        self.line_dict = {}
+        self.monitor_dict = {}
+        name_module_mapping = {
+            "Transformer": self.transformer_dict,
+            "RegControl": self.regcontrol_dict,
+            "Load": self.load_dict,
+            "Capacitor": self.capacitor_dict,
+            "CapControl": self.capcontrol_dict,
+            "Line": self.line_dict,
+            'Monitor': self.monitor_dict,
+        }
+        for idx, elem in enumerate(elem_list):
+            class_name, elem_name = elem.split('.')
+            if class_name in name_module_mapping.keys():
+                name_module_mapping[class_name][elem_name] = idx
+
+        self.line_class_dict = {}
+        for name in self.line_dict.keys():
+            self.line_class_dict[name] = Line(self, name)
+
+        self.bus_phase_dict = {}
+        for x in self.bus_list:
+            self.bus_phase_dict[x] = []
+
+        for node in self.circuit.AllNodeNames:
+            name_splitted = node.split('.')
+            bus = name_splitted[0]
+            phase = int(name_splitted[1])
+            self.bus_phase_dict[bus].append(phase)
+
+    def add_command(self, message=""):
+        self.text.Command = message
+
+
+class Line:
+    def __init__(self, dss, name):
         self.name = name
-        self.V = V
-        # self.x = x
-        # self.y = y
-        # self.distance = distance
+        buses = dss.circuit.CktElements(dss.line_dict[name]).BusNames
+        self.bus = [x.split('.')[0] for x in buses]
 
-
-# Branch class contains the branch object details
-class Branch:
-    def __init__(self, circuit):
-        """
-        Inputs:
-            circuit - DSS COM object
-        Contains:
-            name - string - branch name
-            busname - string (n) - from-node bus name
-            busnameto - string (n) - to-node bus name
-            V - complex array (n x 3) - from-node bus voltage
-            Vto - complex array (n x 3) - to-node bus voltage
-            I - complex array (n x 3) - branch currents
-            nphases - array (n) - number of phases
-            distance - array (n) - distance from the energy meter
-            x - array (n) - from-bus x location
-            y - array (n) - from-bus y location
-            xto - array (n) - to-bus x location
-            yto - array (n) - to-bus y location
-        """
-        n = circuit.NumCktElements
-        name = np.array("                      ").repeat(n)
-        busname = np.array("                      ").repeat(n)
-        busnameto = np.array("                      ").repeat(n)
-        # x = np.zeros(n)
-        # y = np.zeros(n)
-        # xto = np.zeros(n)
-        # yto = np.zeros(n)
-        # distance = np.zeros(n)
-        nphases = np.zeros(n)
-        kvbase = np.zeros(n)
-        I = np.zeros((n,3), dtype=complex)
-        V = np.zeros((n,3), dtype=complex)
-        Vto = np.zeros((n,3), dtype=complex)
-        i = 0
-        for j in range(0, n):
-            el = circuit.CktElements(j)
-            if not re.search("^Line", el.Name):
-                continue  # only pick lines...
-            name[i] = el.Name
-            bus2 = circuit.Buses(re.sub(r"\..*","", el.BusNames[-1]))
-            busnameto[i] = bus2.Name
-            # xto[i] = bus2.x
-            # yto[i] = bus2.y
-            if bus2.x == 0 or bus2.y == 0: continue # skip lines without proper bus coordinates
-            # distance[i] = bus2.Distance
-            v = np.array(bus2.Voltages)
-            nodes = np.array(bus2.Nodes)
-            kvbase[i] = bus2.kVBase
-            nphases[i] = nodes.size
-            if nodes.size > 3: nodes = nodes[0:3]
-            cidx = 2 * np.array(range(0, min(v.size // 2, 3)))
-
-            bus1 = circuit.Buses(re.sub(r"\..*","", el.BusNames[0]))
-
-            if bus1.x == 0 or bus1.y == 0:
-                continue # skip lines without proper bus coordinates
-
-            busname[i] = bus1.Name
-
-            Vto[i, nodes-1] = v[cidx] + 1j * v[cidx + 1]
-            # x[i] = bus1.x
-            # y[i] = bus1.y
-            v = np.array(bus1.Voltages)
-            V[i, nodes-1] = v[cidx] + 1j * v[cidx + 1]
-            current = np.array(el.Currents)
-            I[i, nodes-1] = current[cidx] + 1j * current[cidx + 1]
-            i = i + 1
-        self.name = name[0:i]
-        self.busname = busname[0:i]
-        self.busnameto = busnameto[0:i]
-        self.nphases = nphases[0:i]
-        self.kvbase = kvbase[0:i]
-        # self.x = x[0:i]
-        # self.y = y[0:i]
-        # self.xto = xto[0:i]
-        # self.yto = yto[0:i]
-        # self.distance = distance[0:i]
-
-        self.V = V[0:i]
-        self.Vto = Vto[0:i]
-        self.I = I[0:i]
+        phase = buses[0].split('.')
+        phase.pop(0)
+        self.phase_loc = tuple([int(x)-1 for x in phase])
+        self.numPhase = dss.circuit.CktElements(dss.line_dict[name]).NumPhases
+        if len(self.phase_loc) == 0 and self.numPhase == 3:
+            self.phase_loc = tuple([0, 1, 2])

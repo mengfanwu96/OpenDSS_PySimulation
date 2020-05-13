@@ -1,62 +1,61 @@
-import win32com.client
-import numpy as np
-from collections import Counter
 from LoadProfile import LoadVariation
-from CircuitComponents import Bus, Branch
-from CircuitRecorder import CircuitRecorder
+from CircuitRecorder import DirectRecord
+from CircuitComponents import DSS
+from ControlLoop import *
 import os
 import pickle
-
-
-class DSS:
-    def __init__(self, filename=""):
-        self.engine = win32com.client.Dispatch("OpenDSSEngine.DSS")
-        self.engine.Start("0")
-
-# use the Text interface to OpenDSS
-        self.text = self.engine.Text
-        self.text.Command = "clear"
-        self.circuit = self.engine.ActiveCircuit
-        self.solution = self.circuit.Solution
-        self.elem = self.circuit.ActiveCktElement
-
-        print(self.engine.Version)
-
-        if filename != "":
-            self.text.Command = "compile [" + filename + "]"
-
-    def populate_results(self):
-        self.bus = Bus(self.circuit)
-        self.branch = Branch(self.circuit)
-
-    def add_command(self, message=""):
-        self.text.Command = message
+import re
 
 
 if __name__ == '__main__':
-    overwrite = False
-    if overwrite:
-        d = DSS(os.getcwd() + "\IEEE13Nodeckt.dss")
-        load_list = ['671', '634a', '634b', '634c', '645', '646', '692',
-                     '675a', '675b', '675c', '611', '652', '670a', '670b', '670c']
+    time_span = 1 # in days
+    step_size = "1m"  # format: (n, unit)
+    total_step = 0
+    unit_dict = {'d':1, 'h':24, 'm':60*24, 's':3600*24}
 
-        loading = LoadVariation(load_list)
-        d.text.Command = "set mode=daily"
-        d.text.Command = "set stepsize=1m"
-        # d.solution.Solve()
-        rc = CircuitRecorder(d.circuit, 1440)
+    num_unit = re.split('([dhms])', step_size)
+    assert '0' <= num_unit[0] <= '9', "number is mandatory"
+    assert num_unit[1] in unit_dict.keys(), "unit not found"
+    total_step = int(time_span * unit_dict[num_unit[1]] / int(num_unit[0]))
+    assert total_step >= 1, "time span shorter than step size"
+
+    d = DSS(os.getcwd() + "\IEEE13Nodeckt.dss")
+    d.text.Command = "set mode=daily"
+    d.text.Command = "set stepsize=%s" % step_size
+    overwrite = True
+
+    if overwrite:
+        loading = LoadVariation(d.load_dict.keys())
+        # rc = CircuitRecorder(d.circuit, total_step)   # use variables for system parameters
+        rc = DirectRecord(d, total_step)
+        cap_ctrl = capacitor_ctrl(d)
+        # max_iter = 20
+
+        capacitor_init(d.circuit, list(d.capacitor_dict.keys()))
 
         for step in range(1440):
             loading.load_circuit(d.circuit, step, actual=False)
             d.solution.Solve()
-            rc.record(d.circuit, step)
+            rc.record(d, step)
 
-        with open("circuit_record.pkl", "wb") as output:
-            pickle.dump(rc, output, pickle.HIGHEST_PROTOCOL)
+            # actions = observe_circuit_current(d, line=['670671', '692675'])
+            # actions = observe_circuit_voltage(d, bus=['671', '675'])
+            # for obj, code in actions.items():
+            #     capacitor_controller(d, obj, code, cap_ctrl)
+
+
+        with open("circuit_record_ctrl1.0.pkl", "wb") as output:
+            pickle.dump((rc, loading), output, pickle.HIGHEST_PROTOCOL)
 
     else:
-        with open("circuit_record.pkl", "rb") as read:
-            rc = pickle.load(read)
+        with open("circuit_record_ctrl1.0.pkl", "rb") as read:
+            rc, loading = pickle.load(read)
 
-    # rc.plot(bus_indexes=[x for x in range(1, 3)])
-    rc.plot(branch_indexes=[1])
+    # rc.plot(bus_indexes=[7, 8, 11, 12, 16])
+    # rc.plot(branch_indexes=[1])
+    for i in ['675', '692', '671', '670', '652']:
+        rc.plot_busV(i)
+        # loading.plot_load_onBus(i, d.circuit)
+    # for i in ['692675', '671684', '670671']:
+    #     rc.plot_lineC(i)
+
