@@ -19,7 +19,15 @@ class DSS:
         if filename != "":
             self.text.Command = "compile [" + filename + "]"
 
-        self.bus_list = list(self.circuit.AllBusNames)
+        self.bus_class_dict = {}
+        for idx, x in enumerate(self.circuit.AllBusNames):
+            self.bus_class_dict[x] = Bus(self, x, idx)
+        for node in self.circuit.AllNodeNames:
+            name_split = node.split('.')
+            bus = name_split[0]
+            phase = int(name_split[1])
+            self.bus_class_dict[bus].add_phase_loc(phase)
+        
         elem_list = self.circuit.AllElementNames
         self.transformer_dict = {}
         self.regcontrol_dict = {}
@@ -46,29 +54,45 @@ class DSS:
         for name in self.line_dict.keys():
             self.line_class_dict[name] = Line(self, name)
 
-        self.bus_phase_dict = {}
-        for x in self.bus_list:
-            self.bus_phase_dict[x] = []
-
-        for node in self.circuit.AllNodeNames:
-            name_splitted = node.split('.')
-            bus = name_splitted[0]
-            phase = int(name_splitted[1])
-            self.bus_phase_dict[bus].append(phase)
 
     def add_command(self, message=""):
         self.text.Command = message
 
+    def find_line(self, upstream, downstream):
+        for name, obj in self.line_class_dict.items():
+            if obj.bus[0] == upstream and obj.bus[1] == downstream:
+                return name
+
+        return None
+
 
 class Line:
-    def __init__(self, dss, name):
+    def __init__(self, dss: DSS, name):
         self.name = name
         buses = dss.circuit.CktElements(dss.line_dict[name]).BusNames
         self.bus = [x.split('.')[0] for x in buses]
+        dss.bus_class_dict[self.bus[1]].add_upstream(self.bus[0])
 
         phase = buses[0].split('.')
         phase.pop(0)
-        self.phase_loc = tuple([int(x)-1 for x in phase])
-        self.numPhase = dss.circuit.CktElements(dss.line_dict[name]).NumPhases
-        if len(self.phase_loc) == 0 and self.numPhase == 3:
-            self.phase_loc = tuple([0, 1, 2])
+        self.phase_idx = tuple([int(x)-1 for x in phase])
+        self.phase_num = dss.circuit.CktElements(dss.line_dict[name]).NumPhases
+        if len(self.phase_idx) == 0 and self.phase_num == 3:
+            self.phase_idx = [0, 1, 2]
+
+class Bus:
+    def __init__(self, dss: DSS, name, handle):
+        self.name = name
+        self.handle = handle
+        self.phase_num = 0
+        self.phase_loc = []
+        self.upstream = None
+        self.kVBase = float(dss.circuit.Buses(handle).kVBase)
+
+    def add_upstream(self, name):
+        self.upstream = name
+
+    def add_phase_loc(self, phase):
+        self.phase_loc.append(phase)
+        self.phase_loc.sort()
+        self.phase_num = len(self.phase_loc)

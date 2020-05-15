@@ -1,7 +1,7 @@
 from LoadProfile import LoadVariation
 from CircuitRecorder import DirectRecord
 from CircuitComponents import DSS
-from ControlLoop import *
+from ControlLoop import CapacitorControl
 import os
 import pickle
 import re
@@ -23,39 +23,33 @@ if __name__ == '__main__':
     d.text.Command = "set mode=daily"
     d.text.Command = "set stepsize=%s" % step_size
     overwrite = True
+    buses_to_regulate = ['675', '671', '684', '645', '633']
 
     if overwrite:
         loading = LoadVariation(d.load_dict.keys())
-        # rc = CircuitRecorder(d.circuit, total_step)   # use variables for system parameters
         rc = DirectRecord(d, total_step)
-        cap_ctrl = capacitor_ctrl(d)
-        # max_iter = 20
-
-        capacitor_init(d.circuit, list(d.capacitor_dict.keys()))
+        cap_ctrl = CapacitorControl(d)
 
         for step in range(1440):
             loading.load_circuit(d.circuit, step, actual=False)
             d.solution.Solve()
             rc.record(d, step)
 
-            # actions = observe_circuit_current(d, line=['670671', '692675'])
-            # actions = observe_circuit_voltage(d, bus=['671', '675'])
-            # for obj, code in actions.items():
-            #     capacitor_controller(d, obj, code, cap_ctrl)
+            # observation = cap_ctrl.observe_circuit_voltage(d, buses_to_regulate, rc)
+            # cap_ctrl.control_action(d, observation, mode='v')
+            observation = cap_ctrl.observe_node_power(d, buses_to_regulate, rc)
+            cap_ctrl.control_action(d, observation, mode='power')
 
-
-        with open("circuit_record_ctrl1.0.pkl", "wb") as output:
+        with open("circuit_record_ctrl_2.0.pkl", "wb") as output:
             pickle.dump((rc, loading), output, pickle.HIGHEST_PROTOCOL)
 
     else:
-        with open("circuit_record_ctrl1.0.pkl", "rb") as read:
+        with open("circuit_record_ctrl_2.0.pkl", "rb") as read:
             rc, loading = pickle.load(read)
 
-    # rc.plot(bus_indexes=[7, 8, 11, 12, 16])
-    # rc.plot(branch_indexes=[1])
-    for i in ['675', '692', '671', '670', '652']:
+    for i in ['675', '692', '652']:
         rc.plot_busV(i)
-        # loading.plot_load_onBus(i, d.circuit)
+        loading.plot_load_onBus(i, d.circuit)
     # for i in ['692675', '671684', '670671']:
     #     rc.plot_lineC(i)
 

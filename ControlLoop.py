@@ -1,6 +1,7 @@
 import numpy as np
 from collections import Counter
-
+from CircuitComponents import DSS
+from CircuitRecorder import DirectRecord
 
 def observe_circuit_current(dss, line):
     line_threshold = {'670671':[1400, 500, 750], '692675':[1200, 200, 600]}
@@ -26,82 +27,93 @@ def observe_circuit_current(dss, line):
     return res
 
 
-def capacitor_init(circuit, cap_list, code=None):
-    circuit.Capacitors.Name = cap_list[0]
-    numsteps = int(circuit.Capacitors.NumSteps)
-
-    if code is None:
-        code = numsteps // 2
-    state = [1 for x in range(code)]
-    state += [0 for x in range(numsteps-code)]
-    state = tuple(state)
-    for x in cap_list:
-        circuit.Capacitors.Name = x
-        circuit.Capacitors.States = state
-
-
-
-def capacitor_controller(dss, line, action, cap_ctrl):
-    capacitors = dss.capacitor_dict
-
-    # for line, action in actions.items():
-    for cap, handle in capacitors.items():
-        dss.circuit.setActiveElement('Capacitor.' + cap)
-        if dss.circuit.ActiveCktElement.Properties("Bus1").Val in line:
-            cap_ctrl.turn_capacitor(dss.circuit, cap, action)
-
-
-class capacitor_ctrl:
+class CapacitorControl:
     def __init__(self, dss):
         self.state_continuity = {}
         self.numsteps = {}
+        self.capacitance = {}
+        self.capacitance_slot = {}
+        self.momentum = 7
 
         for x, handle in dss.capacitor_dict.items():
-            self.state_continuity[x] = 0
+            self.state_continuity[x] = self.momentum
             dss.circuit.Capacitors.Name = x
             self.numsteps[x] = dss.circuit.Capacitors.NumSteps
+            self.capacitance[x] = dss.circuit.Capacitors.kvar
+            self.capacitance_slot[x] = self.capacitance[x] / self.numsteps[x]
 
-    def turn_capacitor(self, circuit, cap, num):
-        if self.state_continuity[cap] < 5:
-            self.state_continuity[cap] += 1
-            return
-        else:
-            num = min(num, 0)
-            num = max(num, self.numsteps[cap])
+        self.capacitor_init(dss.circuit, list(dss.capacitor_dict.keys()))
 
-            circuit.Capacitors.Name = cap
-            oldStates = list(circuit.Capacitors.States)
-            c = Counter(oldStates)
+    def capacitor_init(self, circuit, cap_list, code=None):   # some problem: initial state might be perfect, why here letting half of the capacitance on?
+        for x in cap_list:
+            if code is None:
+                code = 0
+            state = [1 for x in range(code)]
+            state += [0 for x in range(self.numsteps[x] - code)]
+            state = tuple(state)
+            circuit.Capacitors.Name = x
+            circuit.Capacitors.States = state
 
-            if c[1] == num:
+    def observe_circuit_voltage(self, dss: DSS, bus, rc: DirectRecord):
+        node_voltages_pu = {}
+        for name in bus:
+            for i in dss.bus_class_dict[name].phase_loc:
+                node = name + '.' + str(i)
+                node_voltages_pu[node] = np.abs(rc.bus_voltages[name][i-1, rc.current_step])
+
+        return node_voltages_pu
+
+    def observe_node_power(self, dss: DSS, bus, rc: DirectRecord):
+        capacitance_aug = {}
+        for name in bus:
+            for i in dss.bus_class_dict[name].phase_loc:
+                node = name + '.' + str(i)
+                V_pu = rc.bus_voltages[name][i-1, rc.current_step]
+                if np.abs(V_pu) >= 1:
+                    capacitance_aug[node] = 0
+                else:
+                    V =  V_pu * rc.bus_vBase[name]
+                    upstream = dss.bus_class_dict[name].upstream
+                    line = dss.find_line(upstream, name)
+                    assert line is not None, "line not found"
+                    I = rc.line_currents[line][i-1, rc.current_step]
+                    angle_diff = (np.angle(V) - np.angle(I)) % np.pi
+                    kVA = np.abs(V * I)
+                    kVA_std = kVA / (np.abs(V_pu) ** 2)
+                    capacitance_aug[node] = kVA_std * np.sin(angle_diff)
+        return capacitance_aug
+
+    def control_action(self, dss, node_info_dict, mode):
+        for cap in self.numsteps.keys():
+            if self.state_continuity[cap] < self.momentum:
                 self.state_continuity[cap] += 1
                 return
             else:
-                for step in range(len(oldStates)):
-                    oldStates[step] = 1 if step < num else 0
-                self.state_continuity[cap] = 0
-                circuit.Capacitors.States = tuple(oldStates)
+                dss.circuit.setActiveElement('Capacitor.' + cap)
+                bus_connected = dss.circuit.ActiveCktElement.Properties("Bus1").Val
+                action_code = 0
+                if bus_connected in node_info_dict.keys():
+                    if mode == 'v':
+                        voltage_slot = 0.1 / self.numsteps[cap]
+                        action_code = np.round((1 - node_info_dict[bus_connected]) / voltage_slot)
+                    elif mode == 'power':
+                        action_code = np.round(node_info_dict[bus_connected] / self.capacitance_slot[cap])
+                    self.turn_capacitor(dss.circuit, cap, action_code)
 
-    def observe_circuit_voltage(dss, bus, rc):
-        bus_voltages = []
-        for name in bus:
-            idx = dss.circuit.setActiveBus(name)
-            bus_voltages.append(dss.circuit.Buses(idx).puVoltages)
 
-        bus_voltages = np.array(bus_voltages)
-        # cplx_bus_voltages = np.zeros((2, 3))
+    def turn_capacitor(self, circuit, cap, num):
+        num = max(num, 0)
+        num = min(num, self.numsteps[cap])
 
-        cidx = np.array([0, 2, 4])  # not reasonable, later there might be < 3 phase
-        cplx_bus_voltages = bus_voltages[:, cidx] + 1j * bus_voltages[:, cidx + 1]
-        abs_bus_voltages = np.abs(cplx_bus_voltages)
+        circuit.Capacitors.Name = cap
+        oldStates = list(circuit.Capacitors.States)
+        c = Counter(oldStates)
 
-        # tap_control = (abs_bus_voltages - 1) / 0.05 + 2
-        tap_control = np.round((1 - abs_bus_voltages) / voltage_slot).astype(int) + numsteps / 2
-
-        bus_code = {}
-        for i in range(2):
-            for j in range(3):
-                bus_code[bus[i] + '.' + str(j + 1)] = tap_control[i, j]
-        # return {bus[0]:cap_control[0], bus[1]:cap_control[1]}
-        return bus_code
-
+        if c[0] == self.numsteps[cap] - num or c[1] == num:
+            self.state_continuity[cap] += 1
+            return
+        else:
+            for step in range(len(oldStates)):
+                oldStates[step] = 1 if step < num else 0
+            self.state_continuity[cap] = 0
+            circuit.Capacitors.States = tuple(oldStates)
