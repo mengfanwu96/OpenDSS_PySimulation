@@ -23,6 +23,8 @@ class DirectRecord():
         self.current_step = None
 
     def record(self, dss, step):
+        self.current_step = step
+
         for x, handle in dss.line_dict.items():
             current_vec = np.array(dss.circuit.CktElements(handle).currents)
             phase_idx = dss.line_class_dict[x].phase_idx
@@ -34,9 +36,6 @@ class DirectRecord():
             phase_idx = self.bus_phase[bus] - 1    # not compatible with the phase loc above in currents
             cidx = 2 * np.array(range(0, min(len(voltage_vec) // 2, 3)))
             self.bus_voltages[bus][phase_idx, step] = voltage_vec[cidx] + 1j * voltage_vec[cidx + 1]
-
-        self.current_step = step
-
 
     def plot_busV(self, bus_name=""):
         if bus_name not in self.bus_voltages.keys():

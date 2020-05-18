@@ -23,7 +23,7 @@ if __name__ == '__main__':
     d.text.Command = "set mode=daily"
     d.text.Command = "set stepsize=%s" % step_size
     overwrite = True
-    buses_to_regulate = ['675', '671', '684', '645', '633']
+    buses_to_regulate = ['675']
 
     if overwrite:
         loading = LoadVariation(d.load_dict.keys())
@@ -38,18 +38,20 @@ if __name__ == '__main__':
             # observation = cap_ctrl.observe_circuit_voltage(d, buses_to_regulate, rc)
             # cap_ctrl.control_action(d, observation, mode='v')
             observation = cap_ctrl.observe_node_power(d, buses_to_regulate, rc)
-            cap_ctrl.control_action(d, observation, mode='power')
+            cap_ctrl.control_action(d, observation, step, mode='power')
 
         with open("circuit_record_ctrl_2.0.pkl", "wb") as output:
-            pickle.dump((rc, loading), output, pickle.HIGHEST_PROTOCOL)
+            pickle.dump((rc, loading, cap_ctrl), output, pickle.HIGHEST_PROTOCOL)
 
     else:
         with open("circuit_record_ctrl_2.0.pkl", "rb") as read:
-            rc, loading = pickle.load(read)
+            rc, loading, cap_ctrl = pickle.load(read)
 
-    for i in ['675', '692', '652']:
+    for i in ['675', '692', '652', '632']:
         rc.plot_busV(i)
-        loading.plot_load_onBus(i, d.circuit)
+        # loading.plot_load_onBus(i, d.circuit)
     # for i in ['692675', '671684', '670671']:
     #     rc.plot_lineC(i)
+    for i in cap_ctrl.cap_control_log.keys():
+        cap_ctrl.plot_control(i)
 
