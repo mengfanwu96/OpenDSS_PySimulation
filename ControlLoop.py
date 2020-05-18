@@ -52,18 +52,15 @@ class CapacitorControl:
             for i in dss.bus_class_dict[name].phase_loc:
                 node = name + '.' + str(i)
                 V_pu = rc.bus_voltages[name][i-1, rc.current_step]
-                if np.abs(V_pu) >= 1:
-                    capacitance_aug[node] = 0
-                else:
-                    V = V_pu * rc.bus_vBase[name]
-                    upstream = dss.bus_class_dict[name].upstream
-                    line = dss.find_line(upstream, name)
-                    assert line is not None, "line not found"
-                    I = rc.line_currents[line][i-1, rc.current_step]
-                    angle_diff = (np.angle(V) - np.angle(I)) % np.pi
-                    kVA = np.abs(V * I)
-                    kVA_std = kVA / (np.abs(V_pu) ** 2)
-                    capacitance_aug[node] = kVA_std * np.sin(angle_diff)
+                V = V_pu * rc.bus_vBase[name]
+                upstream = dss.bus_class_dict[name].upstream
+                line = dss.find_line(upstream, name)
+                assert line is not None, "line not found"
+                I = rc.line_currents[line][i-1, rc.current_step]
+                angle_diff = np.angle(V) - np.angle(I)
+                kVA = np.abs(V * I)
+                kVA_std = kVA / (np.abs(V_pu) ** 2)
+                capacitance_aug[node] = kVA_std * np.sin(angle_diff)
 
         if rc.current_step == 0:
             for cap in self.numsteps.keys():
@@ -105,7 +102,7 @@ class CapacitorControl:
         else:
             old_state = 0
 
-        # num += old_state
+        num += old_state
         num = max(num, 0)
         num = min(num, self.numsteps[cap])
 
