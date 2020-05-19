@@ -96,7 +96,6 @@ class CapacitorControl:
         circuit.Capacitors.Name = cap
         oldStates = list(circuit.Capacitors.States)
         c = Counter(oldStates)
-
         if 1 in c.keys():
             old_state = c[1]
         else:
@@ -109,6 +108,7 @@ class CapacitorControl:
         if self.cap_last_update[cap] != 0:
             assert self.cap_last_update[cap] + self.state_continuity[cap] == time, \
                 'time %s, last update %s, span %s' % (time, self.cap_last_update[cap], self.state_continuity[cap])
+            # TODO: cancel this assertion, only use time_span
 
         if c[0] == self.numsteps[cap] - num or c[1] == num:     # if the new action code does not change the current state
             self.state_continuity[cap] = self.state_continuity[cap] + 1
@@ -135,3 +135,48 @@ class CapacitorControl:
         plt.plot(self.cap_control_log[cap])
         plt.title('States of capacitor %s' % cap)
         plt.show()
+
+
+class RegulatorControl:
+    def __init__(self, dss, total_time):
+        self.state_continuity = {}
+        self.tap_limit = {}
+        self.transformerTap = {}
+        self.tap_width = 0.00625
+
+        for x, handle in dss.transformer_dict.items():
+            if 'reg' in x:
+                dss.circuit.Transformers.Name = x
+                minTap = float(dss.circuit.Transformers.MinTap)
+                maxTap = float(dss.circuit.Transformers.MaxTap)
+                self.tap_limit[x] = [minTap, maxTap]
+                self.transformerTap[x] = np.zeros(total_time)
+
+    def observe_node_power(self, dss: DSS, bus, rc: DirectRecord):
+        tap_ratio = {}
+
+        for i in dss.bus_class_dict[bus].phase_loc:
+            node = bus + '.' + str(i)
+            V_pu = rc.bus_voltages[bus][i - 1, rc.current_step]
+            tap_ratio['reg' + str(i)] = np.sqrt(1 / np.abs(V_pu))
+
+        return tap_ratio
+
+    def control_regulator(self, circuit, tap_ratio, time):
+        for reg, ratio in tap_ratio.items():
+            circuit.Transformers.Name = reg
+            circuit.Transformers.wdg = 2
+
+            old_tap_ratio = circuit.Transformers.Tap
+            new_tap = np.round((old_tap_ratio * ratio - 1) / self.tap_width)
+            new_tap_ratio = 1 + new_tap * self.tap_width
+
+            new_tap_ratio = max(self.tap_limit[reg][0], new_tap_ratio)
+            new_tap_ratio = min(self.tap_limit[reg][1], new_tap_ratio)
+
+            circuit.Transformers.Tap = new_tap_ratio
+            new_tap = int((new_tap_ratio - 1) / self.tap_width)
+            self.record(reg, new_tap, time)
+
+    def record(self, reg, tap, time):
+        self.transformerTap[reg][time] = tap
