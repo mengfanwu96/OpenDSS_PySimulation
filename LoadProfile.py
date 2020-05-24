@@ -14,7 +14,6 @@ class LoadVariation:
                 self.load_time_series[load_name] = np.array([float(x) for x in loads])
         self.load_list = list(load_list)
         self.steps = len(self.load_time_series[self.load_list[0]])
-        self.num = len(self.load_list)
         self.actual = None
 
     def load_circuit(self, circuit, step, load=None, actual=True):

@@ -64,7 +64,7 @@ class CapacitorControl:
 
         if rc.current_step == 0:
             for cap in self.numsteps.keys():
-                dss.circuit.setActiveElement('Capacitor.' + cap)
+                dss.circuit.SetActiveElement('Capacitor.' + cap)
                 bus_connected = dss.circuit.ActiveCktElement.Properties("Bus1").Val
                 if bus_connected in capacitance_aug.keys():
                     self.cap_to_controlBus[cap] = bus_connected
@@ -165,7 +165,7 @@ class RegulatorControl:
     def control_regulator(self, circuit, tap_ratio, time):
         for reg, ratio in tap_ratio.items():
             circuit.Transformers.Name = reg
-            circuit.Transformers.wdg = 2
+            circuit.Transformers.Wdg = 2
 
             old_tap_ratio = circuit.Transformers.Tap
             new_tap = np.round((old_tap_ratio * ratio - 1) / self.tap_width)

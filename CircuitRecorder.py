@@ -26,7 +26,7 @@ class DirectRecord():
         self.current_step = step
 
         for x, handle in dss.line_dict.items():
-            current_vec = np.array(dss.circuit.CktElements(handle).currents)
+            current_vec = np.array(dss.circuit.CktElements(handle).Currents)
             phase_idx = dss.line_class_dict[x].phase_idx
             cidx = 2 * np.array(range(0, min(len(current_vec) // 4, 3)))
             self.line_currents[x][phase_idx, step] = current_vec[cidx] + 1j * current_vec[cidx + 1]

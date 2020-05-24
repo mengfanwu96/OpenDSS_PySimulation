@@ -2,6 +2,8 @@ from LoadProfile import LoadVariation
 from CircuitRecorder import DirectRecord
 from CircuitComponents import DSS
 from ControlLoop import CapacitorControl, RegulatorControl
+from Storage import storage_monitor
+from PVSystem import PVSystem
 import os
 import pickle
 import re
@@ -24,27 +26,32 @@ if __name__ == '__main__':
     d = DSS(os.getcwd() + "\IEEE13Nodeckt.dss")
     d.text.Command = "set mode=daily"
     d.text.Command = "set stepsize=%s" % step_size
+    d.solution.Number = 1
     overwrite = True
-    buses_to_regulate = ['675', '684']
+    buses_to_regulate = ['675']
 
     if overwrite:
         loading = LoadVariation(d.load_dict.keys())
         rc = DirectRecord(d, total_step)
         cap_ctrl = CapacitorControl(d)
-        # reg_ctrl = RegulatorControl(d, 1440)
+        reg_ctrl = RegulatorControl(d, 1440)
+        battery_record = storage_monitor(d, total_step)
+        pv_loading = PVSystem(list(d.pv_dict.keys()))
+        pv_loading.set_profile()
 
         for step in range(1440):
             loading.load_circuit(d.circuit, step, actual=False)
+            pv_loading.load_pv(d.circuit, step)
             d.solution.Solve()
             rc.record(d, step)
-
+            battery_record.record(d.circuit, step)
             observation = cap_ctrl.observe_node_power(d, buses_to_regulate, rc)
-            # reg_observe = reg_ctrl.observe_node_power(d, '670', rc)
+            reg_observe = reg_ctrl.observe_node_power(d, '670', rc)
             cap_ctrl.control_action(d, observation, step, mode='power')
-            # reg_ctrl.control_regulator(d.circuit, reg_observe, step)
+            reg_ctrl.control_regulator(d.circuit, reg_observe, step)
 
-        # with open("circuit_record_ctrl_2.0.pkl", "wb") as output:
-        #     pickle.dump((rc, loading, cap_ctrl, reg_ctrl), output, pickle.HIGHEST_PROTOCOL)
+        with open("circuit_record_ctrl_2.0.pkl", "wb") as output:
+            pickle.dump((rc, loading, cap_ctrl, reg_ctrl), output, pickle.HIGHEST_PROTOCOL)
 
     else:
         with open("circuit_record_ctrl_2.0.pkl", "rb") as read:

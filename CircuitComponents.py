@@ -1,5 +1,3 @@
-import numpy as np
-import re
 import win32com.client
 
 class DSS:
@@ -12,7 +10,6 @@ class DSS:
         self.text.Command = "clear"
         self.circuit = self.engine.ActiveCircuit
         self.solution = self.circuit.Solution
-        self.elem = self.circuit.ActiveCktElement
 
         print(self.engine.Version)
 
@@ -36,6 +33,8 @@ class DSS:
         self.capcontrol_dict = {}
         self.line_dict = {}
         self.monitor_dict = {}
+        self.pv_dict = {}
+        self.storage_dict = {}
         name_module_mapping = {
             "Transformer": self.transformer_dict,
             "RegControl": self.regcontrol_dict,
@@ -44,6 +43,8 @@ class DSS:
             "CapControl": self.capcontrol_dict,
             "Line": self.line_dict,
             'Monitor': self.monitor_dict,
+            "PVSystem2": self.pv_dict,
+            "Storage2": self.storage_dict,
         }
         for idx, elem in enumerate(elem_list):
             class_name, elem_name = elem.split('.')
