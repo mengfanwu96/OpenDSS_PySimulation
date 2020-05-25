@@ -58,7 +58,7 @@ class CapacitorControl:
                 assert line is not None, "line not found"
                 I = rc.line_currents[line][i-1, rc.current_step]
                 angle_diff = np.angle(V) - np.angle(I)
-                kVA = np.abs(V * I)
+                kVA = np.abs(V * I)     # TODO: any method to directly obtain power? ActiveCktElement.Powers
                 kVA_std = kVA / (np.abs(V_pu) ** 2)
                 capacitance_aug[node] = kVA_std * np.sin(angle_diff)
 
@@ -138,7 +138,7 @@ class CapacitorControl:
 
 
 class RegulatorControl:
-    def __init__(self, dss, total_time):
+    def __init__(self, dss):
         self.state_continuity = {}
         self.tap_limit = {}
         self.transformerTap = {}
@@ -150,7 +150,6 @@ class RegulatorControl:
                 minTap = float(dss.circuit.Transformers.MinTap)
                 maxTap = float(dss.circuit.Transformers.MaxTap)
                 self.tap_limit[x] = [minTap, maxTap]
-                self.transformerTap[x] = np.zeros(total_time)
 
     def observe_node_power(self, dss: DSS, bus, rc: DirectRecord):
         tap_ratio = {}
@@ -159,6 +158,11 @@ class RegulatorControl:
             node = bus + '.' + str(i)
             V_pu = rc.bus_voltages[bus][i - 1, rc.current_step]
             tap_ratio['reg' + str(i)] = np.sqrt(1 / np.abs(V_pu))
+
+        if rc.current_step == 0:
+            for x, handle in dss.transformer_dict.items():
+                if 'reg' in x:
+                    self.transformerTap[x] = np.zeros(rc.total_step)
 
         return tap_ratio
 
@@ -180,3 +184,15 @@ class RegulatorControl:
 
     def record(self, reg, tap, time):
         self.transformerTap[reg][time] = tap
+
+    def plot(self, reg=None):  # TODO: selective plotting
+        fig, axes = plt.subplots(len(self.transformerTap), 1)
+        if len(self.transformerTap) == 1:
+            axes = [axes]
+
+        for idx, (x, data) in enumerate(self.transformerTap.items()):
+            axes[idx].plot(data)
+            axes[idx].set_xlabel('time (m)')
+            axes[idx].set_ylabel('controller Tap')
+
+        fig.show()

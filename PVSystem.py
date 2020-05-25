@@ -1,14 +1,35 @@
 from CircuitComponents import DSS
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 
 class PVSystem:
-    def __init__(self, pv_list, root='Irradiance_Profile'):
-        if len(pv_list) != 0:
-            self.pv_list = pv_list
-            self.irr_time_series = {}
+    def __init__(self, dss:DSS, num_steps, root='Irradiance_Profile'):
+        if len(dss.pv_dict.keys()) != 0:
+            self.pv_phase_dict = dss.pv_dict
             self.root = root
+            self.power_log = {}
+            self.var_perturbation_denominator = 4
+
+            for x in self.pv_phase_dict.keys():
+                phase_list = []
+                dss.circuit.SetActiveElement('PVSystem2.' + x)
+                phase_num = int(dss.circuit.ActiveCktElement.NumPhases)
+
+                if phase_num == 3:
+                    phase_list = [1, 2, 3]
+                else:
+                    phases = dss.circuit.ActiveCktElement.Properties('bus1').Val.split('.')
+                    phases.pop(0)
+                    phase_list = [int(x) for x in phases]
+                    phase_list.sort()
+
+                self.pv_phase_dict[x] = phase_list
+                self.power_log[x] = {}
+                for i in phase_list:
+                    self.power_log[x][i] = np.zeros(num_steps, dtype=complex)
+
 
     def set_profile(self, day=None):
         if day is None:
@@ -38,13 +59,41 @@ class PVSystem:
 
     def load_pv(self, circuit, time_step):
         power = self.power_poly(time_step)
-        if time_step < self.sunrise * 60 + 10 or time_step > self.sunset * 60 + 10:
+        if time_step < self.sunrise * 60 + 10 or time_step > self.sunset * 60 + 10 or power < 0:
             power = 0
 
-        for x in self.pv_list:
+        perturbed = np.random.normal(loc=power, scale=power/self.var_perturbation_denominator)
+        perturbed = max([perturbed, 0])
+        for x in self.pv_phase_dict.keys():
             circuit.SetActiveElement('PVSystem2.' + x)
             circuit.ActiveCktElement.Properties('irradiance').Val = power
             circuit.ActiveCktElement.Properties('temperature').Val = self.temperature_poly(time_step)
+            # TODO: panel temperature can be much higher than environment temperature
+
+    def record_pv(self, circuit, time_step):
+        if time_step > 600:
+            a = 1
+        for x in self.pv_phase_dict.keys():
+            phase_list = self.pv_phase_dict[x]
+            circuit.SetActiveElement('PVSystem2.' + x)
+            cplx_power = circuit.ActiveCktElement.Powers
+            for i in range(len(phase_list)):
+                self.power_log[x][phase_list[i]][time_step] = -complex(float(cplx_power[i]), float(cplx_power[i+1]))
+                # TODO: modify the previous complex number logging
+
+    def plot_pv(self, pv_list=None):
+        # TODO: selective plotting
+        for x, phase_list in self.pv_phase_dict.items():
+            fig, axes = plt.subplots(len(phase_list), 1)
+            if len(phase_list) == 1:
+                axes = [axes]
+
+            for idx, ax in enumerate(axes):
+                ax.plot(np.abs(self.power_log[x][phase_list[idx]]))
+                ax.set_xlabel('time (m)')
+                ax.set_ylabel('power')
+
+            fig.show()
 
 if __name__ == '__main__':
     p = PVSystem(['PV1'])

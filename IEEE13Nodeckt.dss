@@ -86,16 +86,16 @@ batchedit loadshape..* useactual=no
 
 
 !LOAD DEFINITIONS,
-New Load.671 Bus1=671.1.2.3  Phases=3 Conn=Delta Model=1 kV=4.16   PF=0.92 kW=1155
+New Load.671 Bus1=671.1.2.3  Phases=3 Conn=Delta Model=1 kV=4.16   PF=0.92 kW=200
 New Load.634a Bus1=634.1     Phases=1 Conn=Wye  Model=1 kV=0.277  PF=0.95  kW=160
 New Load.634b Bus1=634.2     Phases=1 Conn=Wye  Model=1 kV=0.277  PF=0.98  kW=120
 New Load.634c Bus1=634.3     Phases=1 Conn=Wye  Model=1 kV=0.277  PF=0.95  kW=120
 New Load.645 Bus1=645.2       Phases=1 Conn=Wye  Model=1 kV=2.4      PF=0.93 kW=170
 New Load.646 Bus1=646.2.3    Phases=1 Conn=Delta Model=2 kV=4.16    PF=0.91  kW=230
 New Load.692 Bus1=692.3.1    Phases=1 Conn=Delta Model=5 kV=4.16    PF=0.92  kW=170
-New Load.675a Bus1=675.1    Phases=1 Conn=Wye  Model=1 kV=2.4       PF=0.95  kW=485
+New Load.675a Bus1=675.1    Phases=1 Conn=Wye  Model=1 kV=2.4       PF=0.95  kW=150
 New Load.675b Bus1=675.2    Phases=1 Conn=Wye  Model=1 kV=2.4       PF=0.95  kW=68
-New Load.675c Bus1=675.3    Phases=1 Conn=Wye  Model=1 kV=2.4       PF=0.95  kW=290
+New Load.675c Bus1=675.3    Phases=1 Conn=Wye  Model=1 kV=2.4       PF=0.95  kW=128
 New Load.611 Bus1=611.3      Phases=1 Conn=Wye  Model=5 kV=2.4      PF=0.95  kW=170
 New Load.652 Bus1=652.1      Phases=1 Conn=Wye  Model=2 kV=2.4      PF=0.95  kW=128
 New Load.670a Bus1=670.1    Phases=1 Conn=Wye  Model=1 kV=2.4       PF=0.97  kW=17
@@ -139,13 +139,11 @@ New Line.684652    Phases=1 Bus1=684.1        Bus2=652.1      LineCode=mtx607 Le
 !SWITCH DEFINITIONS 
 New Line.671692    Phases=3 Bus1=671   Bus2=692  Switch=y  r1=1e-4 r0=1e-4 x1=0.000 x0=0.000 c1=0.000 c0=0.000
 
-redirect PVSystemComponents.dss
+!redirect PVSystemComponents.dss
 
-New XYCurve.Eff npts=4 xarray=[.1 .2 .4 1.0 ] yarray=[ .86 .9 .93 .97 ]
-New Storage2.Storage1 phases=1 bus1=652.1 kv=2.4 pf=1 kWrated=50 %reserve=20
-~ effcurve=Eff kWhrated=500 %stored=15 state=charging dispmode=External
-
-New Monitor.Mon_Storage1_State element=Storage2.Storage1 mode=3
+!New XYCurve.Eff npts=4 xarray=[.1 .2 .4 1.0 ] yarray=[ .86 .9 .93 .97 ]
+!New Storage2.Storage1 phases=1 bus1=652.1 kv=2.4 pf=1 kWrated=50 %reserve=20
+!~ effcurve=Eff kWhrated=500 %stored=15 state=charging dispmode=External
 
 
 Set Voltagebases=[115, 4.16, .48]
