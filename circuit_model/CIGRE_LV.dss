@@ -1,0 +1,67 @@
+clear
+
+Set DefaultBaseFrequency=50
+
+! Slack Bus
+New circuit.LV_CIGRE bus1=R0 basekv=20 pu=1.00 angle=-30 frequency=50 phases=3 MVAsc3=100000 MVAsc1=110000
+
+! Substation Transformer
+new transformer.MVLV1 phases=1 windings=2 buses=[R0.1.2 R1.1.0] conns=[wye,wye] kvs=[20 0.23094] kvas=[166.67 166.667] Xhl=4.0 %Rs=[0.5 0.5]
+new transformer.MVLV2 phases=1 windings=2 buses=[R0.2.3 R1.2.0] conns=[wye,wye] kvs=[20 0.23094] kvas=[166.67 166.667] Xhl=4.0 %Rs=[0.5 0.5]
+new transformer.MVLV3 phases=1 windings=2 buses=[R0.3.1 R1.3.0] conns=[wye,wye] kvs=[20 0.23094] kvas=[166.67 166.667] Xhl=4.0 %Rs=[0.5 0.5]
+
+! Linecodes
+new linecode.UG1 nphases=4 units=km
+~ rmatrix=[ 0.211 0.049 0.049 0.049 | 0.049 0.211 0.049 0.049 | 0.049 0.049 0.211 0.049 | 0.049 0.049 0.049 0.211 ]
+~ xmatrix=[ 0.747 0.673 0.651 0.673 | 0.673 0.747 0.673 0.651 | 0.651 0.673 0.747 0.673 | 0.673 0.651 0.673 0.747 ]
+~ Normamps=117.0
+~ kron=y
+
+new linecode.UG3 nphases=4 units=km
+~ rmatrix=[ 0.871 0.049 0.049 0.049 | 0.049 0.871 0.049 0.049 | 0.049 0.049 0.871 0.049 | 0.049 0.049 0.049 0.871 ]
+~ xmatrix=[ 0.797 0.719 0.697 0.719 | 0.719 0.797 0.719 0.697 | 0.697 0.719 0.797 0.719 | 0.719 0.697 0.719 0.797 ]
+~ Normamps=117.0
+~ kron=y
+
+! Lines
+New Line.L1 Bus1=R1.1.2.3 Bus2=R2.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L2 Bus1=R2.1.2.3 Bus2=R3.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L3 Bus1=R3.1.2.3 Bus2=R4.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L4 Bus1=R4.1.2.3 Bus2=R5.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L5 Bus1=R5.1.2.3 Bus2=R6.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L6 Bus1=R6.1.2.3 Bus2=R7.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L7 Bus1=R7.1.2.3 Bus2=R8.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L8 Bus1=R8.1.2.3 Bus2=R9.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L9 Bus1=R9.1.2.3 Bus2=R10.1.2.3 phases=3 Linecode=UG1 Length=35 Units=m
+New Line.L10 Bus1=R3.1.2.3 Bus2=R11.1.2.3 phases=3 Linecode=UG3 Length=35 Units=m
+New Line.L11 Bus1=R4.1.2.3 Bus2=R12.1.2.3 phases=3 Linecode=UG3 Length=35 Units=m
+New Line.L12 Bus1=R12.1.2.3 Bus2=R13.1.2.3 phases=3 Linecode=UG3 Length=35 Units=m
+New Line.L13 Bus1=R13.1.2.3 Bus2=R14.1.2.3 phases=3 Linecode=UG3 Length=35 Units=m
+New Line.L14 Bus1=R14.1.2.3 Bus2=R15.1.2.3 phases=3 Linecode=UG3 Length=30 Units=m
+New Line.L15 Bus1=R6.1.2.3 Bus2=R16.1.2.3 phases=3 Linecode=UG3 Length=30 Units=m
+New Line.L16 Bus1=R9.1.2.3 Bus2=R17.1.2.3 phases=3 Linecode=UG3 Length=30 Units=m
+New Line.L17 Bus1=R10.1.2.3 Bus2=R18.1.2.3 phases=3 Linecode=UG3 Length=30 Units=m
+
+! Loads
+New Load.Load1 phases=3 bus1=R1.1.2.3 Conn=wye Model=1 kv=0.4 pf=0.95 kVA=200  vminpu=0.3 vmaxpu=1.5
+New Load.Load2 phases=3 bus1=R11.1.2.3 Conn=wye Model=1 kv=0.4 pf=0.95 kVA=15  vminpu=0.3 vmaxpu=1.5
+New Load.Load3 phases=3 bus1=R15.1.2.3 Conn=wye Model=1 kv=0.4 pf=0.95 kVA=52  vminpu=0.3 vmaxpu=1.5
+New Load.Load4 phases=3 bus1=R16.1.2.3 Conn=wye Model=1 kv=0.4 pf=0.95 kVA=55  vminpu=0.3 vmaxpu=1.5
+New Load.Load5 phases=3 bus1=R17.1.2.3 Conn=wye Model=1 kv=0.4 pf=0.95 kVA=35  vminpu=0.3 vmaxpu=1.5
+New Load.Load6 phases=3 bus1=R18.1.2.3 Conn=wye Model=1 kv=0.4 pf=0.95 kVA=47  vminpu=0.3 vmaxpu=1.5
+
+! Curves for PVSystem2
+New XYCurve.MyPvsT npts=4 xarray=[0 25 75 100] yarray=[1.2 1.0 0.8 0.6]
+New XYCurve.Myeff npts=4 xarray=[.1 .2 .4 1.0] yarray=[.86 .9 .93 .97]
+
+! PVs
+new PVSystem2.PV1 phases=3 bus1=R11.1.2.3 kV=0.4 kva=120 pf=1 pmpp=119 temperature=25 irrad=0.9 EFFCURVE=Myeff P-TCURVE=MyPvsT model=1  vminpu=0.3 vmaxpu=1.5
+new PVSystem2.PV2 phases=3 bus1=R15.1.2.3 kV=0.4 kva=120 pf=1 pmpp=119 temperature=25 irrad=0.9 EFFCURVE=Myeff P-TCURVE=MyPvsT model=1  vminpu=0.3 vmaxpu=1.5
+new PVSystem2.PV3 phases=3 bus1=R16.1.2.3 kV=0.4 kva=240 pf=1 pmpp=239 temperature=25 irrad=0.9 EFFCURVE=Myeff P-TCURVE=MyPvsT model=1  vminpu=0.3 vmaxpu=1.5
+new PVSystem2.PV4 phases=3 bus1=R17.1.2.3 kV=0.4 kva=120 pf=1 pmpp=119 temperature=25 irrad=0.9 EFFCURVE=Myeff P-TCURVE=MyPvsT model=1  vminpu=0.3 vmaxpu=1.5
+new PVSystem2.PV5 phases=3 bus1=R18.1.2.3 kV=0.4 kva=240 pf=1 pmpp=239 temperature=25 irrad=0.9 EFFCURVE=Myeff P-TCURVE=MyPvsT model=1  vminpu=0.3 vmaxpu=1.5
+
+Set voltagebases=[20 0.4]
+Calcvoltagebases
+
+!solve

@@ -1,0 +1,18 @@
+{
+  "root": "C:/Users/chmewu/OpenDSS_PySimulation/",
+  "model_script": "/circuit_model/IEEE13Nodeckt.dss",
+  "pickle_path": "/pickled/",
+  "override":  true,
+  "simulation_parameter": {
+      "duration": "1d",
+      "step": "1m",
+      "cap_control": "none",
+      "reg_control": "inside",
+      "with_pv": true
+  },
+  "observation": ["670"],
+  "plot": {
+      "bus": ["670", "684"],
+      "reg_tap": true
+  }
+}

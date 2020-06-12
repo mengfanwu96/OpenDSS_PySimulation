@@ -5,11 +5,14 @@ import numpy as np
 
 
 class LoadVariation:
-    def __init__(self, load_list, root='Daily_1min_100profiles'):
+    def __init__(self, load_list, root: str, profile_path='/profiles/Daily_1min_100profiles'):
         self.load_time_series = {}
         self.std_load = {}
+
+        abs_profile_path = root + profile_path
+
         for idx, load_name in enumerate(load_list):
-            with open(root + '\load_profile_%s.txt' % (idx + 1)) as reader:
+            with open(abs_profile_path + '/load_profile_%s.txt' % (idx + 1)) as reader:
                 loads = reader.readlines()
                 self.load_time_series[load_name] = np.array([float(x) for x in loads])
         self.load_list = list(load_list)
@@ -29,7 +32,7 @@ class LoadVariation:
                 circuit.Loads.Name = load_name
                 circuit.Loads.kW = self.load_time_series[load_name][step]
         else:
-            assert (load in self.load_list.keys())
+            assert (load in self.load_list)
             circuit.Loads.Name = load
             circuit.Loads.kW = self.load_time_series[load][step]
 

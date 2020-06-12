@@ -1,12 +1,12 @@
 import numpy as np
 from collections import Counter
-from CircuitComponents import DSS
-from CircuitRecorder import DirectRecord
+from .CircuitComponents import DSS
+from .CircuitRecorder import DirectRecord
 import matplotlib.pyplot as plt
 
 
 class CapacitorControl:
-    def __init__(self, dss):
+    def __init__(self, dss, mode: str):
         self.state_continuity = {}
         self.numsteps = {}
         self.capacitance = {}
@@ -25,6 +25,7 @@ class CapacitorControl:
             self.capacitance_slot[x] = self.capacitance[x] / self.numsteps[x]
 
         self.capacitor_init(dss.circuit, list(dss.capacitor_dict.keys()))
+        self.control = True if mode == 'inside' else False
 
     def capacitor_init(self, circuit, cap_list, code=None):   # some problem: initial state can not be specified per capacitor
         for x in cap_list:
@@ -138,30 +139,32 @@ class CapacitorControl:
 
 
 class RegulatorControl:
-    def __init__(self, dss):
+    def __init__(self, dss, reg_name, mode: str):
         self.state_continuity = {}
         self.tap_limit = {}
         self.transformerTap = {}
-        self.tap_width = 0.00625
-
+        self.tap_width = {}
+        self.last_observe = {}
+        self.reg_name = reg_name
         for x, handle in dss.transformer_dict.items():
-            if 'reg' in x:
+            if self.reg_name in x:
                 dss.circuit.Transformers.Name = x
                 minTap = float(dss.circuit.Transformers.MinTap)
                 maxTap = float(dss.circuit.Transformers.MaxTap)
                 self.tap_limit[x] = [minTap, maxTap]
+                self.tap_width[x] = float(maxTap - minTap) / dss.circuit.Transformers.NumTaps
+        self.control = True if mode == 'inside' else False
 
     def observe_node_power(self, dss: DSS, bus, rc: DirectRecord):
         tap_ratio = {}
 
         for i in dss.bus_class_dict[bus].phase_loc:
-            node = bus + '.' + str(i)
             V_pu = rc.bus_voltages[bus][i - 1, rc.current_step]
-            tap_ratio['reg' + str(i)] = np.sqrt(1 / np.abs(V_pu))
+            tap_ratio[self.reg_name + str(i)] = np.sqrt(1 / np.abs(V_pu))
 
         if rc.current_step == 0:
             for x, handle in dss.transformer_dict.items():
-                if 'reg' in x:
+                if self.reg_name in x:
                     self.transformerTap[x] = np.zeros(rc.total_step)
 
         return tap_ratio
@@ -172,18 +175,32 @@ class RegulatorControl:
             circuit.Transformers.Wdg = 2
 
             old_tap_ratio = circuit.Transformers.Tap
-            new_tap = np.round((old_tap_ratio * ratio - 1) / self.tap_width)
-            new_tap_ratio = 1 + new_tap * self.tap_width
+            new_tap = np.round((old_tap_ratio * ratio - 1) / self.tap_width[reg])
+            new_tap_ratio = 1 + new_tap * self.tap_width[reg]
 
             new_tap_ratio = max(self.tap_limit[reg][0], new_tap_ratio)
             new_tap_ratio = min(self.tap_limit[reg][1], new_tap_ratio)
 
             circuit.Transformers.Tap = new_tap_ratio
-            new_tap = int((new_tap_ratio - 1) / self.tap_width)
+            new_tap = np.round((new_tap_ratio - 1) / self.tap_width[reg])
             self.record(reg, new_tap, time)
 
     def record(self, reg, tap, time):
         self.transformerTap[reg][time] = tap
+        if reg in self.last_observe.keys():
+            self.transformerTap[reg][self.last_observe[reg] + 1: time] = self.transformerTap[reg][self.last_observe[reg]]
+
+        self.last_observe[reg] = time
+
+    def record_auto_tap(self, dss: DSS, rc:DirectRecord):
+        for x, handle in dss.transformer_dict.items():
+            if self.reg_name in x:
+                if rc.current_step == 0:
+                    self.transformerTap[x] = np.zeros(rc.total_step)
+                dss.circuit.Transformers.Name = x
+                dss.circuit.Transformers.Wdg = 2
+                tap_ratio = dss.circuit.Transformers.Tap
+                self.transformerTap[x][rc.current_step] = (tap_ratio - 1) / self.tap_width[x]
 
     def plot(self, reg=None):  # TODO: selective plotting
         fig, axes = plt.subplots(len(self.transformerTap), 1)
@@ -192,7 +209,7 @@ class RegulatorControl:
 
         for idx, (x, data) in enumerate(self.transformerTap.items()):
             axes[idx].plot(data)
-            axes[idx].set_xlabel('time (m)')
+            axes[idx].set_xlabel('time')
             axes[idx].set_ylabel('controller Tap')
 
         fig.show()

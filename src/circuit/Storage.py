@@ -1,4 +1,4 @@
-from CircuitComponents import DSS
+from .CircuitComponents import DSS
 import numpy as np
 
 

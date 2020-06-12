@@ -14,7 +14,7 @@ class DirectRecord():
         self.bus_phase = {}
         for name, bus_obj in dss.bus_class_dict.items():
             self.bus_vBase[name] = bus_obj.kVBase
-            self.bus_voltages[name] = np.zeros((3, time_steps), dtype=complex)
+            self.bus_voltages[name] = np.zeros((3, time_steps), dtype=complex)      # per unit voltages
             self.bus_phase[name] = np.array(bus_obj.phase_loc)
 
         for x in dss.line_dict.keys():
@@ -31,10 +31,15 @@ class DirectRecord():
             cidx = 2 * np.array(range(0, min(len(current_vec) // 4, 3)))
             self.line_currents[x][phase_idx, step] = current_vec[cidx] + 1j * current_vec[cidx + 1]
 
-        for bus, obj in dss.bus_class_dict.items():
-            voltage_vec = np.array(dss.circuit.Buses(obj.handle).puVoltages)
+        # for bus, obj in dss.bus_class_dict.items():
+        #     voltage_vec = np.array(dss.circuit.Buses(obj.handle).puVoltages)
+        for bus in dss.bus_class_dict.keys():
+            dss.circuit.SetActiveBus(bus)
+            voltage_vec = np.array(dss.circuit.ActiveBus.puVoltages)
             phase_idx = self.bus_phase[bus] - 1    # not compatible with the phase loc above in currents
             cidx = 2 * np.array(range(0, min(len(voltage_vec) // 2, 3)))
+            if (self.bus_voltages[bus][phase_idx, step].shape[0] != voltage_vec[cidx].shape[0]):
+                a = 1
             self.bus_voltages[bus][phase_idx, step] = voltage_vec[cidx] + 1j * voltage_vec[cidx + 1]
 
     def plot_busV(self, bus_name=""):

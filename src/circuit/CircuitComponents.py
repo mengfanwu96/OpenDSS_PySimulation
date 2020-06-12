@@ -1,11 +1,12 @@
 import win32com.client
+import re
+import os
 
 class DSS:
-    def __init__(self, filename=""):
+    def __init__(self, filename):
         self.engine = win32com.client.Dispatch("OpenDSSEngine.DSS")
         self.engine.Start("0")
 
-# use the Text interface to OpenDSS
         self.text = self.engine.Text
         self.text.Command = "clear"
         self.circuit = self.engine.ActiveCircuit
@@ -55,16 +56,25 @@ class DSS:
         for name in self.line_dict.keys():
             self.line_class_dict[name] = Line(self, name)
 
-
-    def add_command(self, message=""):
-        self.text.Command = message
+    def release_com(self):
+        del self.solution
+        del self.circuit
+        del self.text
+        del self.engine
 
     def find_line(self, upstream, downstream):
         for name, obj in self.line_class_dict.items():
             if obj.bus[0] == upstream and obj.bus[1] == downstream:
                 return name
-
         return None
+
+    def find_regulator(self):
+        for x, id in self.transformer_dict.items():
+            if '1' in x or '2' in x or '3' in x:
+                num_phase = int(self.circuit.CktElements(id).NumPhases)
+                if num_phase == 1:
+                    reg_name = re.split('([123])', x)
+                    return reg_name[0]
 
 
 class Line:

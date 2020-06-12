@@ -1,14 +1,14 @@
 New XYCurve.Eff npts=4 xarray=[.1 .2 .4 1.0] yarray=[0.9 0.92 0.95 1]
 New XYCurve.FatorPvsT npts=4 xarray=[0 25 75 100] yarray=[1 1 1 1]
 
-New PVSystem2.PV1 phases=3 bus1=675 Pmpp=1000 kV=4.16 kVA=1200 conn=delta EffCurve=Eff kvar=500
-~ P-TCurve=FatorPvsT %Pmpp=100 kvarMax=600 kvarMaxAbs=800 %cutout=0.1 %cutin=0.12
-~ %PminNoVars=20 %PminkvarMax=75
+!New PVSystem2.PV1 phases=3 bus1=675 Pmpp=1000 kV=4.16 kVA=1200 conn=delta EffCurve=Eff kvar=500
+!~ P-TCurve=FatorPvsT %Pmpp=100 kvarMax=600 kvarMaxAbs=800 %cutout=0.1 %cutin=0.12
+!~ %PminNoVars=20 %PminkvarMax=75 temperature=25
 
 New PVSystem2.PV2 phases=3 bus1=680 Pmpp=800 kV=4.16 kVA=1000 conn=delta EffCurve=Eff kvar=400
 ~ P-TCurve=FatorPvsT %Pmpp=100 kvarMax=500 kvarMaxAbs=720 %cutout=0.1 %cutin=0.12
-~ %PminNoVars=20 %PminkvarMax=75
+~ %PminNoVars=20 %PminkvarMax=75 temperature=25
 
 New PVSystem2.PV3 phases=1 bus1=652.1 Pmpp=300 kV=2.402 kVA=400 conn=wye EffCurve=Eff kvar=150
 ~ P-TCurve=FatorPvsT %Pmpp=100 kvarMax=180 kvarMaxAbs=200 %cutout=0.1 %cutin=0.12
-~ %PminNoVars=20 %PminkvarMax=75
+~ %PminNoVars=20 %PminkvarMax=75 temperature=25
