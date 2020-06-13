@@ -1,0 +1,19 @@
+{
+  "root": "C:/Users/chmewu/OpenDSS_PySimulation/",
+  "model_script": "/circuit_model/IEEE13Nodeckt.dss",
+  "storage_path": "/supervised_learning_data/",
+  "pickle_path": "/pickled/",
+  "mode": "reg",
+  "phase": 1,
+  "override":  true,
+  "simulation_parameter": {
+      "duration": "1d",
+      "step": "1m",
+      "window": 10,
+      "mode": "reg",
+      "cap_control": "none",
+      "reg_control": "inside",
+      "with_pv": true
+  },
+  "observation": ["652"]
+}

@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from collections import Counter
+from .CircuitComponents import DSS
 
 
-class DirectRecord():
+class DirectRecord:
     def __init__(self, dss, time_steps):
         self.line_currents = {}
         self.bus_voltages = {}
@@ -29,11 +30,11 @@ class DirectRecord():
             current_vec = np.array(dss.circuit.CktElements(handle).Currents)
             phase_idx = dss.line_class_dict[x].phase_idx
             cidx = 2 * np.array(range(0, min(len(current_vec) // 4, 3)))
+            # line currents: （current vector leaving bus 0， current vector entering bus 1), basically * -1
             self.line_currents[x][phase_idx, step] = current_vec[cidx] + 1j * current_vec[cidx + 1]
 
-        # for bus, obj in dss.bus_class_dict.items():
-        #     voltage_vec = np.array(dss.circuit.Buses(obj.handle).puVoltages)
         for bus in dss.bus_class_dict.keys():
+            # not using bus handle because it changes after deletion of circuit element
             dss.circuit.SetActiveBus(bus)
             voltage_vec = np.array(dss.circuit.ActiveBus.puVoltages)
             phase_idx = self.bus_phase[bus] - 1    # not compatible with the phase loc above in currents
@@ -84,3 +85,33 @@ class DirectRecord():
         b = Counter(extreme_point_2)[True]
         res['ext'] = a + b
         return res
+
+
+class RecordNode:
+    def __init__(self, dss: DSS, bus: str, phase):
+        assert bus in dss.bus_class_dict.keys()
+        self.node = dss.bus_class_dict[bus]
+        phases = [phase]
+        self.phase_num = len(phases)
+        self.vidx = [self.node.phase_loc.index(i) for i in phases]
+
+        line_name = dss.find_line(self.node.upstream, bus)
+        assert self.line is not None, "Line not found"
+        self.line = dss.line_class_dict[line_name]
+        self.cidx = [self.line.phase_idx.index(i-1) for i in phases]
+
+    def fetch(self, dss):
+        r = np.zeros((2, self.phase_num), dtype=complex)
+        dss.circuit.SetActiveBus(self.node.name)
+        voltage_vec = np.array(dss.circuit.ActiveBus.puVoltages)
+
+        for res_index, i in enumerate(self.vidx):
+            r[0, res_index] = voltage_vec[2*i] + 1j * voltage_vec[2*i+1]
+
+        handle = dss.circuit.SetActiveElement("Line." + self.line)
+        current_vec = dss.circuit.CktElements(handle).Currents
+        for res_index, i in enumerate(self.cidx):
+            r[1, res_index] = current_vec[2*i] + 1j * current_vec[2*i+1]
+
+        return r
+

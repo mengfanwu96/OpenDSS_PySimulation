@@ -17,6 +17,7 @@ class DSS:
         if filename != "":
             self.text.Command = "compile [" + filename + "]"
 
+        # Record bus information
         self.bus_class_dict = {}
         for idx, x in enumerate(self.circuit.AllBusNames):
             self.bus_class_dict[x] = Bus(self, x, idx)
@@ -86,7 +87,7 @@ class Line:
 
         phase = buses[0].split('.')
         phase.pop(0)
-        self.phase_idx = tuple([int(x)-1 for x in phase])
+        self.phase_idx = [int(x)-1 for x in phase]
         self.phase_num = dss.circuit.CktElements(dss.line_dict[name]).NumPhases
         if len(self.phase_idx) == 0 and self.phase_num == 3:
             self.phase_idx = [0, 1, 2]

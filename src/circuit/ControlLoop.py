@@ -25,9 +25,10 @@ class CapacitorControl:
             self.capacitance_slot[x] = self.capacitance[x] / self.numsteps[x]
 
         self.capacitor_init(dss.circuit, list(dss.capacitor_dict.keys()))
-        self.control = True if mode == 'inside' else False
+        self.external_control = True if mode == 'inside' else False
 
-    def capacitor_init(self, circuit, cap_list, code=None):   # some problem: initial state can not be specified per capacitor
+    def capacitor_init(self, circuit, cap_list, code=None):
+        # some problem: initial state can not be specified per capacitor
         for x in cap_list:
             if code is None:
                 code = 0
@@ -142,18 +143,44 @@ class RegulatorControl:
     def __init__(self, dss, reg_name, mode: str):
         self.state_continuity = {}
         self.tap_limit = {}
-        self.transformerTap = {}
+        self.tap_range = {}
         self.tap_width = {}
+        self.transformerTap = {}
         self.last_observe = {}
         self.reg_name = reg_name
+        self.record_tap_parameter(dss)
+        self.external_control = True if mode == 'inside' else False   # TODO: this flag is not used
+
+    def record_tap_parameter(self, dss: DSS):
         for x, handle in dss.transformer_dict.items():
             if self.reg_name in x:
                 dss.circuit.Transformers.Name = x
                 minTap = float(dss.circuit.Transformers.MinTap)
                 maxTap = float(dss.circuit.Transformers.MaxTap)
-                self.tap_limit[x] = [minTap, maxTap]
-                self.tap_width[x] = float(maxTap - minTap) / dss.circuit.Transformers.NumTaps
-        self.control = True if mode == 'inside' else False
+                tap_num = int(dss.circuit.Transformers.NumTaps)
+                self.register_tap_parameter(x, minTap, maxTap, tap_num)
+
+    def register_tap_parameter(self, reg, min_tap, max_tap, tap_num):
+            self.tap_limit[reg] = [min_tap, max_tap]
+            width = (max_tap - min_tap) / tap_num
+            self.tap_width[reg] = width
+            self.tap_range[reg] = [np.round((Tap - 1) / width).astype(int) for Tap in self.tap_limit[reg]]
+
+    def set_tap_parameter(self, dss: DSS, phase, num_taps: int, max_tap: float = 1.1, min_tap: float = 0.9):
+        phase_list = list(phase)
+        for i in phase_list:
+            x = self.reg_name + str(i)
+            dss.circuit.Transformers.Name = x
+            dss.circuit.Transformers.NumTaps = num_taps
+            dss.circuit.Transformers.MaxTap = max_tap
+            dss.circuit.Transformers.MinTap = min_tap
+            self.register_tap_parameter(x, min_tap, max_tap, num_taps)
+
+    def set_tap(self, dss: DSS, reg: str, tap: int):
+        assert self.tap_range[0] <= tap <= self.tap_range[1], "Tap number not in range!"
+        dss.circuit.Transformers.Name = reg
+        ratio = 1 + tap * self.tap_width[reg]
+        dss.circuit.Transformers.Tap = ratio
 
     def observe_node_power(self, dss: DSS, bus, rc: DirectRecord):
         tap_ratio = {}
