@@ -40,9 +40,12 @@ class Simulation:
 
     def add_observation_at_bus(self, bus):
         if type(bus) is str:
+            assert bus in list(self.d.bus_class_dict.keys()), "Bus %s not found!" % bus
             self.observation_loc.append(bus)
         elif type(bus) is list:
-            self.observation_loc += bus
+            for i in bus:
+                assert i in list(self.d.bus_class_dict.keys()), "Bus %s not found!" % i
+                self.observation_loc.append(i)
 
     def switch_on_off(self, enable: bool = False):
         elem_list = self.enable_list if enable else self.disable_list
@@ -128,7 +131,7 @@ class BaseSimulation(Simulation):
 class ExtractFeature(BaseSimulation):
     def __init__(self, circuit_path: str, root: str, window_len: int = 10, time_span: str = '1d', step: str = '1m',
                  mode: str = 'reg', cap_control: str = 'none', reg_control: str = 'none', with_pv:bool = False,
-                 observation: str = '670', phase: int = 1):
+                 record_loc: str = '670', phase: int = 1):
         super(ExtractFeature, self).__init__(circuit_path=circuit_path,
                                              root=root,
                                              time_span=time_span,
@@ -138,8 +141,8 @@ class ExtractFeature(BaseSimulation):
                                              with_pv=with_pv)
         # TODO: battery scenario
         del self.rc
-        assert observation in self.d.bus_class_dict.keys(), "Observation location does not exist!"
-        self.observation = observation
+        assert record_loc in self.d.bus_class_dict.keys(), "Record location does not exist!"
+        self.record_loc = record_loc   # TODO: just recording one node, not general, same applied to NodeRecorder
         self.phase = phase
         self.window = window_len
         self.mode = mode
@@ -159,10 +162,11 @@ class ExtractFeature(BaseSimulation):
         for status in [True, False]:
             self.switch_on_off(enable=status)
 
-    def extract(self, storage_path: str, window: int = 10):
+    def extract(self):
         loading = LoadVariation(self.d.load_dict.keys(), root=self.root)
 
-        segments = int(self.total_step / window) if not self.total_step % window else int(self.total_step / window) + 1
+        segments = int(self.total_step / self.window) if not self.total_step % self.window else \
+            int(self.total_step / self.window) + 1   # TODO: Not necessary here, fix a tap and run whole simulation
         action_range = None
         element = None
         if self.mode == 'reg':
@@ -173,7 +177,7 @@ class ExtractFeature(BaseSimulation):
             pass
 
         record = {action: np.zeros((2, self.total_step), dtype=complex) for action in action_range}
-        node_recorder = RecordNode(self.d, self.observation, phase=self.phase)
+        node_recorder = RecordNode(self.d, self.record_loc, phase=self.phase)
 
         for segment in range(segments):
             for tap in action_range:
@@ -182,13 +186,13 @@ class ExtractFeature(BaseSimulation):
                 elif self.mode == "cap":
                     pass
 
-                for step in range(segment * window, min((segment+1) * window, self.total_step)):
+                for step in range(segment * self.window, min((segment+1) * self.window, self.total_step)):
                     loading.load_circuit(self.d.circuit, step, actual=False)        # TODO: merge loading?
                     if self.pv is not None:
                         self.pv.load_pv(self.d.circuit, step)
 
                     self.d.solution.Solve()
-                    record[tap][:, step] = node_recorder.fetch(self.d)
+                    record[tap][:, step] = node_recorder.fetch(self.d)[:, 0]
 
                     if self.pv is not None:
                         self.pv.record_pv(self.d.circuit, step)
@@ -204,3 +208,4 @@ class ExtractFeature(BaseSimulation):
                             self.reg_ctrl.control_regulator(self.d.circuit, reg_observe, step)
                         else:
                             self.reg_ctrl.record_auto_tap(self.d, self.rc)
+        return record

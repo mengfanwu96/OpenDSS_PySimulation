@@ -91,12 +91,15 @@ class RecordNode:
     def __init__(self, dss: DSS, bus: str, phase):
         assert bus in dss.bus_class_dict.keys()
         self.node = dss.bus_class_dict[bus]
-        phases = [phase]
+        if type(phase) is int:
+            phases = [phase]
+        else:
+            phases = phase
         self.phase_num = len(phases)
         self.vidx = [self.node.phase_loc.index(i) for i in phases]
 
         line_name = dss.find_line(self.node.upstream, bus)
-        assert self.line is not None, "Line not found"
+        assert line_name is not None, "Line not found"
         self.line = dss.line_class_dict[line_name]
         self.cidx = [self.line.phase_idx.index(i-1) for i in phases]
 
@@ -108,7 +111,7 @@ class RecordNode:
         for res_index, i in enumerate(self.vidx):
             r[0, res_index] = voltage_vec[2*i] + 1j * voltage_vec[2*i+1]
 
-        handle = dss.circuit.SetActiveElement("Line." + self.line)
+        handle = dss.circuit.SetActiveElement("Line." + self.line.name)
         current_vec = dss.circuit.CktElements(handle).Currents
         for res_index, i in enumerate(self.cidx):
             r[1, res_index] = current_vec[2*i] + 1j * current_vec[2*i+1]

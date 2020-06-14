@@ -177,7 +177,7 @@ class RegulatorControl:
             self.register_tap_parameter(x, min_tap, max_tap, num_taps)
 
     def set_tap(self, dss: DSS, reg: str, tap: int):
-        assert self.tap_range[0] <= tap <= self.tap_range[1], "Tap number not in range!"
+        assert self.tap_range[reg][0] <= tap <= self.tap_range[reg][1], "Tap number not in range!"
         dss.circuit.Transformers.Name = reg
         ratio = 1 + tap * self.tap_width[reg]
         dss.circuit.Transformers.Tap = ratio
