@@ -1,7 +1,7 @@
 {
   "root": "C:/Users/chmewu/OpenDSS_PySimulation/",
   "model_script": "/circuit_model/IEEE13Nodeckt.dss",
-  "storage_path": "/supervised_learning_data/",
+  "storage_path": "/supervised_learning/data/",
   "mode": "reg",
   "phase": 1,
   "record_loc": "652",
