@@ -12,7 +12,7 @@ def convert2seconds(time: str):
     return float(t[0]) * duration_dict[t[1]]
 
 
-def get_total_step(time_span:str, step:str):
+def get_steps(time_span:str, step:str):
     duration = convert2seconds(time_span)
     step_size = convert2seconds(step)
 
@@ -23,4 +23,4 @@ def get_total_step(time_span:str, step:str):
 
 
 if __name__ == '__main__':
-    print(get_total_step('1d', '1m'))
+    print(get_steps('1d', '1m'))

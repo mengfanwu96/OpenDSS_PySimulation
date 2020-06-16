@@ -28,7 +28,6 @@ if __name__ == '__main__':
                                  cap_control=sim_pars['cap_control'],
                                  reg_control=sim_pars['reg_control'],
                                  with_pv=sim_pars['with_pv'])
-            sim.add_observation_at_bus(pars['observation'])
             sim.run()
 
             # stop the COM interface so that we can store the data

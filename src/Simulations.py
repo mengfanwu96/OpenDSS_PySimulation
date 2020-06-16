@@ -13,7 +13,7 @@ class Simulation:
     def __init__(self, circuit_path: str, root: str, time_span: str, step: str):
         self.time_span = time_span
         self.step_size = step
-        self.total_step = get_total_step(time_span, step)
+        self.total_step = get_steps(time_span, step)
         self.d = DSS(root + circuit_path)
         self.root = root
 
@@ -27,6 +27,7 @@ class Simulation:
         self.d.text.Command = 'set stepsize=%s' % self.step_size
         self.d.solution.Number = 1
 
+        self.rc = DirectRecord(self.d, self.total_step)
         self.simulated = False
         self.observation_loc = []
         self.disable_list = []
@@ -40,12 +41,15 @@ class Simulation:
 
     def add_observation_at_bus(self, bus):
         if type(bus) is str:
-            assert bus in list(self.d.bus_class_dict.keys()), "Bus %s not found!" % bus
-            self.observation_loc.append(bus)
+            buses = [bus]
         elif type(bus) is list:
-            for i in bus:
-                assert i in list(self.d.bus_class_dict.keys()), "Bus %s not found!" % i
-                self.observation_loc.append(i)
+            buses = bus
+
+        for i in buses:
+            assert i in list(self.d.bus_class_dict.keys()), "Bus %s not found!" % i
+            self.observation_loc.append(i)
+            self.rc.add_node_recorder(self.d, i)
+
 
     def switch_on_off(self, enable: bool = False):
         elem_list = self.enable_list if enable else self.disable_list
@@ -62,20 +66,20 @@ class Simulation:
 
 class BaseSimulation(Simulation):
     def __init__(self, circuit_path: str, root: str, time_span: str = '1d', step: str = '1m',
-                 cap_control: str = 'none', reg_control: str = 'none', with_pv:bool = False):
+                 cap_control: str = 'none', reg_control='none', with_pv:bool = False):
         super(BaseSimulation, self).__init__(circuit_path, root, time_span, step)
 
-        self.rc = DirectRecord(self.d, self.total_step)
         self.cap_ctrl = None
         self.reg_ctrl = None
         self.pv = None
 
         # Set up mode to control regulators
-        if reg_control in ['inside', 'auto']:
-            reg_name = self.d.find_regulator()
-            self.reg_ctrl = RegulatorControl(self.d, reg_name, reg_control)      # when 'auto', record
-            print('Name of regulators in the circuit: %s' % reg_name)
-        if reg_control in ['inside', 'none']:
+        if reg_control != "none":
+            if reg_control.mode in ['inside', 'auto', 'sl']:
+                reg_name = self.d.find_regulator()
+                self.reg_ctrl = RegulatorControl(self.d, reg_name, reg_control, time_span, step)      # when 'auto', record
+                print('Name of regulators in the circuit: %s' % reg_name)
+        if reg_control == 'none' or reg_control.mode in ['inside', 'sl']:
             self.disable_list.append(self.d.regcontrol_dict)
 
         # Set up mode to control capacitors
@@ -84,9 +88,6 @@ class BaseSimulation(Simulation):
         elif cap_control == 'none':
             self.disable_list.append(self.d.capcontrol_dict)
             self.disable_list.append(self.d.capacitor_dict)
-            # self.d.text.Command = 'calcv' # Careful! this command changes the index of buses (or maybe elements)
-            # after disabling the components, solve again, bus handles change. Need another bus handle assignment
-            # Problem solved by using Bus Name to get data rather than element handles.
 
         # Set up PV
         if with_pv:
@@ -121,9 +122,9 @@ class BaseSimulation(Simulation):
                     pass  # add independent observation
 
             if self.reg_ctrl is not None:
-                if self.reg_ctrl.external_control:
-                    reg_observe = self.reg_ctrl.observe_node_power(self.d, self.observation_loc[0], self.rc)
-                    self.reg_ctrl.control_regulator(self.d.circuit, reg_observe, step)
+                reg_observe = self.reg_ctrl.observe_node(self.d, self.rc)
+                self.reg_ctrl.control_regulator(self.d.circuit, reg_observe, step)
+
                 else:
                     self.reg_ctrl.record_auto_tap(self.d, self.rc)
 
@@ -177,7 +178,7 @@ class ExtractFeature(BaseSimulation):
             pass
 
         record = {action: np.zeros((2, self.total_step), dtype=complex) for action in action_range}
-        node_recorder = RecordNode(self.d, self.record_loc, phase=self.phase)
+        node_recorder = RecordNode(self.d, self.record_loc)
 
         for segment in range(segments):
             for tap in action_range:
@@ -192,7 +193,7 @@ class ExtractFeature(BaseSimulation):
                         self.pv.load_pv(self.d.circuit, step)
 
                     self.d.solution.Solve()
-                    record[tap][:, step] = node_recorder.fetch(self.d)[:, 0]
+                    record[tap][:, step] = node_recorder.fetch(self.d, self.phase)[:, 0]
 
                     if self.pv is not None:
                         self.pv.record_pv(self.d.circuit, step)
@@ -206,6 +207,11 @@ class ExtractFeature(BaseSimulation):
                         if self.reg_ctrl.external_control:
                             reg_observe = self.reg_ctrl.observe_node_power(self.d, self.observation_loc[0], self.rc)
                             self.reg_ctrl.control_regulator(self.d.circuit, reg_observe, step)
-                        else:
+                        else: # TODO: do not distinguish here, different actions inside reg_controller
                             self.reg_ctrl.record_auto_tap(self.d, self.rc)
         return record
+
+
+    # TODO: sliding window to extract features?
+    #         to check performance of one window shift in other situation? (ml control module in simulation)
+

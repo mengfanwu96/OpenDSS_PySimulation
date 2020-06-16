@@ -22,6 +22,10 @@ class DirectRecord:
             self.line_currents[x] = np.zeros((3, time_steps), dtype=complex)
 
         self.current_step = None
+        self.node_recorder = {}
+
+    def add_node_recorder(self, dss: DSS, bus:str):
+        self.node_recorder[bus] = RecordNode(dss, bus)
 
     def record(self, dss, step):
         self.current_step = step
@@ -88,33 +92,37 @@ class DirectRecord:
 
 
 class RecordNode:
-    def __init__(self, dss: DSS, bus: str, phase):
+    def __init__(self, dss: DSS, bus: str):
         assert bus in dss.bus_class_dict.keys()
         self.node = dss.bus_class_dict[bus]
-        if type(phase) is int:
-            phases = [phase]
-        else:
-            phases = phase
-        self.phase_num = len(phases)
-        self.vidx = [self.node.phase_loc.index(i) for i in phases]
 
         line_name = dss.find_line(self.node.upstream, bus)
         assert line_name is not None, "Line not found"
         self.line = dss.line_class_dict[line_name]
-        self.cidx = [self.line.phase_idx.index(i-1) for i in phases]
 
-    def fetch(self, dss):
-        r = np.zeros((2, self.phase_num), dtype=complex)
+    def fetch(self, dss, phase):
+        vidx, cidx, length = self.get_index_for_vector(phase)
+        r = np.zeros((2, length), dtype=complex)
+
         dss.circuit.SetActiveBus(self.node.name)
         voltage_vec = np.array(dss.circuit.ActiveBus.puVoltages)
 
-        for res_index, i in enumerate(self.vidx):
+        for res_index, i in enumerate(vidx):
             r[0, res_index] = voltage_vec[2*i] + 1j * voltage_vec[2*i+1]
 
         handle = dss.circuit.SetActiveElement("Line." + self.line.name)
         current_vec = dss.circuit.CktElements(handle).Currents
-        for res_index, i in enumerate(self.cidx):
+        for res_index, i in enumerate(cidx):
             r[1, res_index] = current_vec[2*i] + 1j * current_vec[2*i+1]
-
         return r
 
+    def get_index_for_vector(self, phase):
+        phases = []
+        if type(phase) is int:
+            phases.append(phase)
+        elif type(phase) is list:
+            phases += phase
+        vidx = [self.node.phase_loc.index(i) for i in phases]
+        cidx = [self.line.phase_idx.index(i - 1) for i in phases]
+
+        return vidx, cidx, len(phases)

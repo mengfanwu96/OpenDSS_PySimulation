@@ -7,10 +7,20 @@
       "duration": "1d",
       "step": "1m",
       "cap_control": "none",
-      "reg_control": "inside",
+      "reg_control": [{
+          "base_loc": "670.1.2.3",
+          "mode": "inside",
+          "interval": "10m",
+          "shift": "5m"
+        }, {
+          "base_loc": "652.3",
+          "mode": "sl",
+          "interval": "10m",
+          "shift": "0m",
+          "model": "/supervised_learning/model/shift_0.pkl"
+      }],
       "with_pv": true
   },
-  "observation": ["670"],
   "plot": {
       "bus": ["670", "684"],
       "reg_tap": true
