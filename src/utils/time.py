@@ -12,12 +12,13 @@ def convert2seconds(time: str):
     return float(t[0]) * duration_dict[t[1]]
 
 
-def get_steps(time_span:str, step:str):
+def get_steps(time_span:str, step:str, pos: bool = True):
     duration = convert2seconds(time_span)
     step_size = convert2seconds(step)
 
     total_step = int(duration / step_size)
-    assert total_step >= 1, "time span shorter than step size"
+    if pos:
+        assert total_step >= 1, "time span shorter than step size"
 
     return total_step
 

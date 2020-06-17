@@ -30,7 +30,7 @@ class Simulation:
         self.rc = DirectRecord(self.d, self.total_step)
         self.simulated = False
         self.observation_loc = []
-        self.disable_list = []
+        self.disable_list = []  # list of dictionaries:
         self.enable_list = []
 
     def show_all_observation_loc(self):
@@ -40,6 +40,7 @@ class Simulation:
         print('The first one is selected for regulator control')
 
     def add_observation_at_bus(self, bus):
+        buses = None
         if type(bus) is str:
             buses = [bus]
         elif type(bus) is list:
@@ -50,15 +51,26 @@ class Simulation:
             self.observation_loc.append(i)
             self.rc.add_node_recorder(self.d, i)
 
-
     def switch_on_off(self, enable: bool = False):
         elem_list = self.enable_list if enable else self.disable_list
         output_str = 'enabled.' if enable else 'disabled.'
 
         for ele_dict in elem_list:
             for x, id in ele_dict.items():
+                print("Name of elements in dictionary: %s" % x)
                 print(self.d.circuit.CktElements(id).Name + " " + output_str)
                 self.d.circuit.CktElements(id).Enabled = enable
+
+    def get_object_dict(self, obj_name: str, phase: list): # TODO: move into circuit (DSS)
+        res = {}
+        all_components = self.d.name_module_mapping[obj_name]
+        for name, handle in all_components.items():
+            if name == self.d.find_regulator():
+                bus_connected = self.d.circuit.CktElements(handle).BusNames
+                phase_connected = int(bus_connected.split('.')[1])
+                if phase_connected in phase:
+                    res.update({name: handle})
+        return res
 
     def stop(self):
         self.d.release_com()
@@ -73,14 +85,12 @@ class BaseSimulation(Simulation):
         self.reg_ctrl = None
         self.pv = None
 
-        # Set up mode to control regulators
-        if reg_control != "none":
-            if reg_control.mode in ['inside', 'auto', 'sl']:
-                reg_name = self.d.find_regulator()
-                self.reg_ctrl = RegulatorControl(self.d, reg_name, reg_control, time_span, step)      # when 'auto', record
-                print('Name of regulators in the circuit: %s' % reg_name)
-        if reg_control == 'none' or reg_control.mode in ['inside', 'sl']:
-            self.disable_list.append(self.d.regcontrol_dict)
+        reg_name = self.d.find_regulator()
+        print('Name of regulators in the circuit: %s' % reg_name)
+        self.reg_ctrl = RegulatorControl(self.d, reg_name, reg_control, time_span, step, self.root)
+        self.reg_ctrl.remove_none_controller()
+        self.reg_ctrl.add_node_recorder(self.d, self.rc)
+        self.enable_list.append(self.get_object_dict("RegControl", self.reg_ctrl.get_active_auto_control()))
 
         # Set up mode to control capacitors
         if cap_control in ['inside', 'auto']:
@@ -122,11 +132,8 @@ class BaseSimulation(Simulation):
                     pass  # add independent observation
 
             if self.reg_ctrl is not None:
-                reg_observe = self.reg_ctrl.observe_node(self.d, self.rc)
+                reg_observe = self.reg_ctrl.observe_node(self.rc)
                 self.reg_ctrl.control_regulator(self.d.circuit, reg_observe, step)
-
-                else:
-                    self.reg_ctrl.record_auto_tap(self.d, self.rc)
 
 
 class ExtractFeature(BaseSimulation):
@@ -144,6 +151,7 @@ class ExtractFeature(BaseSimulation):
         del self.rc
         assert record_loc in self.d.bus_class_dict.keys(), "Record location does not exist!"
         self.record_loc = record_loc   # TODO: just recording one node, not general, same applied to NodeRecorder
+        # adopting BasesSimulation here
         self.phase = phase
         self.window = window_len
         self.mode = mode
@@ -172,7 +180,7 @@ class ExtractFeature(BaseSimulation):
         element = None
         if self.mode == 'reg':
             element = self.reg_ctrl.reg_name + str(self.phase)
-            range_limit = self.reg_ctrl.tap_range[element]
+            range_limit = self.reg_ctrl.tap_num_range[element]
             action_range = np.arange(range_limit[0], range_limit[1] + 1, step=1)
         elif self.mode == 'cap':
             pass
@@ -183,12 +191,12 @@ class ExtractFeature(BaseSimulation):
         for segment in range(segments):
             for tap in action_range:
                 if self.mode == "reg":
-                    self.reg_ctrl.set_tap(self.d, element, tap)
+                    self.reg_ctrl.set_tap(self.d.circuit, element, tap)
                 elif self.mode == "cap":
                     pass
 
                 for step in range(segment * self.window, min((segment+1) * self.window, self.total_step)):
-                    loading.load_circuit(self.d.circuit, step, actual=False)        # TODO: merge loading?
+                    loading.load_circuit(self.d.circuit, step, actual=False)
                     if self.pv is not None:
                         self.pv.load_pv(self.d.circuit, step)
 
@@ -204,14 +212,10 @@ class ExtractFeature(BaseSimulation):
                             pass  # add independent observation
 
                     if self.reg_ctrl is not None and self.mode != 'reg':
-                        if self.reg_ctrl.external_control:
-                            reg_observe = self.reg_ctrl.observe_node_power(self.d, self.observation_loc[0], self.rc)
-                            self.reg_ctrl.control_regulator(self.d.circuit, reg_observe, step)
-                        else: # TODO: do not distinguish here, different actions inside reg_controller
-                            self.reg_ctrl.record_auto_tap(self.d, self.rc)
+                        reg_observe = self.reg_ctrl.observe_node(self.rc)
+                        self.reg_ctrl.control_regulator(self.d.circuit, reg_observe, step)
         return record
 
 
-    # TODO: sliding window to extract features?
-    #         to check performance of one window shift in other situation? (ml control module in simulation)
+    # TODO: check performance of one window shift in other situation? (ml control module in simulation)
 

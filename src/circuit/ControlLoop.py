@@ -3,7 +3,20 @@ from collections import Counter
 from .CircuitComponents import DSS
 from .CircuitRecorder import DirectRecord, RecordNode
 from ..utils.time import *
+from ..supervised_learning.fabricate_features import FabricateFeature
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import KFold
+from sklearn.feature_selection import SelectKBest
+from sklearn.feature_selection import mutual_info_classif
+from sklearn.neural_network import MLPClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
+import joblib
+
+
+def not_observe(time: int, window: int, shift: int):
+    return bool( (time - shift) % window )
 
 
 class CapacitorControl:
@@ -143,43 +156,89 @@ class CapacitorControl:
 class RegulatorControl:
     def __init__(self, dss, reg_name, parameter, time_span:str, step_size:str, root:str):
         self.state_continuity = {}
-        self.tap_limit = {}
-        self.tap_range = {}
+        self.tap_ratio_limit = {}
+        self.tap_num_range = {}
         self.tap_width = {}
-        self.last_observe = {}
         self.reg_name = reg_name
         self.root = root
 
         self.transformerTap = {(reg_name + str(i)): np.zeros(get_steps(time_span, step_size))
                                for i in [1, 2, 3]}
-
+        self.last_observe = {(reg_name + str(i)): -1
+                               for i in [1, 2, 3]}
         self.record_tap_parameter(dss)
-        self.controller = {i:{} for i in range(1, 4)}
+        self.controller = {i: {} for i in range(1, 4)}
         self.step_size = step_size
 
+        self.active_reg_control = []
         if type(parameter) is dict:
             self.set_observation_loc_parameter(parameter, dss.bus_class_dict)
         elif type(parameter) is list:
             for i in parameter:
                 self.set_observation_loc_parameter(i, dss.bus_class_dict)
 
-    def set_observation_loc_parameter(self, p:dict, bd:dict):
-        bus_phase = p['base_loc'].split('.')
-        bus = bus_phase[0]
+    def set_observation_loc_parameter(self, p: dict, bd:dict):
+        if p['mode'] == 'none':
+            assert "phase" in p.keys(), "Phase for disabling regulator control not specified."
+            invalid_phase = None
+            if type(p['phase']) is int:
+                invalid_phase = [p['phase']]
+            elif type(p['phase']) is list:
+                invalid_phase = p['phase']
+            for i in invalid_phase:
+                none_mode = {'mode': 'none'}
+                if self.check_controller_to_write(i, none_mode):
+                    self.controller[i] = none_mode
+        else:
+            bus_phase = p['base_loc'].split('.')
+            bus = bus_phase[0]
+            del bus_phase[0]
+            phase = [int(i) for i in bus_phase] if len(bus_phase) else bd[bus].phase_loc
 
-        del bus_phase[0]
-        phase = [int(i) for i in bus_phase] if len(bus_phase) else bd[bus].phase_loc
+            for i in phase:
+                if self.check_controller_to_write(i, p):
+                    self.controller[i] = {'bus': bus,
+                                          'mode': p['mode'],
+                                          'interval': get_steps(p['interval'], self.step_size),
+                                          'shift': get_steps(p['shift'], self.step_size, pos=False)}
+                    self.controller[i]['shift'] %= self.controller[i]['interval']
+                    if self.controller[i]['mode'] == 'sl':
+                        assert 'model' in p.keys(), "Supervised-learning model not found!"
+                        self.controller[i]['model'] = self.get_trained_supervised_model(self.root + p['model'])
+                        self.controller[i]['feature_fabricator'] = FabricateFeature(self.controller[i]['interval'])
 
-        for i in phase:
-            assert len(self.controller[i]) == 0, "Duplicated control setting for regulator phase %s." % i
-            self.controller[i] = {'bus': bus,
-                                  'mode': p['mode'],
-                                  'interval': get_steps(p['interval'], self.step_size),
-                                  'shift': get_steps(p['shift'], self.step_size)}
-            self.controller[i]['shift'] %= self.controller[i]['interval']
-            if self.controller[i]['mode'] == 'sl':
-                assert 'model' in p.values(), "Supervised-learning model not found!"
-                self.controller[i]['model'] = get_trained_supervised_model(self.root + p['model'])
+    def get_active_auto_control(self):
+        res = []
+        for phase, controller in self.controller.items():
+            if controller['mode'] == 'auto':
+                res.append(phase)
+        return res
+
+    def remove_none_controller(self):
+        to_delete = []
+        for phase, controller in self.controller.items():
+            if controller and controller['mode'] == 'none':
+                to_delete.append(phase)
+            elif not controller:
+                to_delete.append(phase)
+
+        for i in to_delete:
+            del self.controller[i]
+
+    def add_node_recorder(self, dss: DSS, rc: DirectRecord):
+        for phase, controller in self.controller.items():
+            if controller['mode'] == 'inside' or controller['mode'] == 'sl':
+                rc.add_node_recorder(dss, controller['bus'])
+
+    def check_controller_to_write(self, phase: int, new_setting: dict):
+        if self.controller[phase]:   # if the controller is already set
+            print("Duplicated controller setting for phase %s" % phase)
+            print("Original setting: %s" % self.controller[phase])
+            print("New setting: %s" % new_setting)
+            override = bool(input("Override? 1: yes, 0: no"))
+            return override
+        else:
+            return True
 
     def record_tap_parameter(self, dss: DSS):
         for x, handle in dss.transformer_dict.items():
@@ -191,10 +250,10 @@ class RegulatorControl:
                 self.register_tap_parameter(x, minTap, maxTap, tap_num)
 
     def register_tap_parameter(self, reg, min_tap, max_tap, tap_num):
-            self.tap_limit[reg] = [min_tap, max_tap]
+            self.tap_ratio_limit[reg] = [min_tap, max_tap]
             width = (max_tap - min_tap) / tap_num
             self.tap_width[reg] = width
-            self.tap_range[reg] = [np.round((Tap - 1) / width).astype(int) for Tap in self.tap_limit[reg]]
+            self.tap_num_range[reg] = [np.round((Tap - 1) / width).astype(int) for Tap in self.tap_ratio_limit[reg]]
 
     def set_tap_parameter(self, dss: DSS, phase, num_taps: int, max_tap: float = 1.1, min_tap: float = 0.9):
         phase_list = list(phase)
@@ -206,72 +265,115 @@ class RegulatorControl:
             dss.circuit.Transformers.MinTap = min_tap
             self.register_tap_parameter(x, min_tap, max_tap, num_taps)
 
-    def set_tap(self, dss: DSS, reg: str, tap: int):
-        assert self.tap_range[reg][0] <= tap <= self.tap_range[reg][1], "Tap number not in range!"
-        dss.circuit.Transformers.Name = reg
-        ratio = 1 + tap * self.tap_width[reg]
-        dss.circuit.Transformers.Tap = ratio
+    def set_tap(self, circuit, reg: str, tap: int):
+        ratio = self.tap2ratio(tap, reg=reg)
+        circuit.Transformers.Name = reg
+        circuit.Transformers.Tap = ratio
 
-    def observe_node(self, dss: DSS, rc: DirectRecord):
+    def ratio2tap(self, ratio: float, **kwargs) -> int:
+        assert 'phase' in kwargs.keys() or 'reg' in kwargs.keys(), "Regulator index not specified."
+        if 'phase' in kwargs.keys() and 'reg' not in kwargs.keys():
+            reg = self.reg_name + str(kwargs['phase'])
+        else:
+            reg = kwargs['reg']
+
+        assert self.tap_ratio_limit[reg][0] <= ratio <= self.tap_ratio_limit[reg][1], "Tap scaling ratio not in range."
+
+        k = np.round((ratio - 1) / self.tap_width[reg])
+        return k
+
+    def tap2ratio(self, tap: int, **kwargs) -> float:
+        assert 'phase' in kwargs.keys() or 'reg' in kwargs.keys(), "Regulator index not specified."
+        if 'phase' in kwargs.keys() and 'reg' not in kwargs.keys():
+            reg = self.reg_name + str(kwargs['phase'])
+        else:
+            reg = kwargs['reg']
+
+        assert self.tap_num_range[reg][0] <= tap <= self.tap_num_range[reg][1], "Tap number not in range."
+
+        ratio = tap * self.tap_width[reg] + 1
+        return ratio
+
+    def observe_node(self, rc: DirectRecord):
         observation = {}
-        for phase, controller in self.controller:
+        for phase, controller in self.controller.items():
             a = None
-            if controller.mode == 'inside':
-                a = self.observe_node_power(controller.bus, phase, rc)
-            elif controller.mode == 'sl':
-                a = self.get_sl_feature(controller.bus, phase, rc)
-            elif controller.mode == 'auto':
+            if controller['mode'] in ['auto', 'none'] or \
+                    not_observe(rc.current_step, controller['interval'], controller['shift']):
                 pass
+            elif controller['mode'] == 'inside':
+                a = self.observe_node_power(controller['bus'], phase, rc)
+            elif controller['mode'] == 'sl':
+                a = self.get_sl_feature(controller['bus'], phase, rc)
             observation[phase] = a
         return observation
 
     def get_sl_feature(self, bus:str, phase:int, rc: DirectRecord):
-        rc.node_recorder[bus].get_index_for_vector(phase)
-        # TODO: add path to model in json
-        #       save feature fabricator in model and import it here
-        window = self.controller[phase]['interval']
         v_vector = rc.bus_voltages[bus][phase - 1, :]
         c_vector = rc.line_currents[rc.node_recorder[bus].line.name][phase - 1, :]
+        tap = self.transformerTap[self.reg_name + str(phase)][rc.current_step - 1]
+        fv = self.controller[phase]['feature_fabricator'].fabricate_feature_vector(v_vector, c_vector, rc.current_step, tap)
 
-        return None
+        return fv
 
     def observe_node_power(self, bus: str, phase: int, rc: DirectRecord):
         tap_ratio = {}
         V_pu = rc.bus_voltages[bus][phase - 1, rc.current_step]
         tap_ratio[self.reg_name + str(phase)] = np.sqrt(1 / np.abs(V_pu))
+        # TODO: try direct reciprocate with out square root?
+
         return tap_ratio
 
-    def control_regulator(self, circuit, tap_ratio, time):
+    def control_regulator(self, circuit, observation, time):
+        for phase, controller in self.controller.items():
+            action = None
+            record = None
+
+            if controller['mode'] == 'auto':
+                record = self.get_auto_tap(circuit, phase)
+            elif observation[phase] is not None:
+                if controller['mode'] == 'inside':
+                    action = self.scaling_based_control(circuit, observation[phase])
+                elif controller['mode'] == 'sl':
+                    action = self.supervised_learning_control(phase, observation[phase])
+
+            if action is not None:
+                self.set_tap(circuit, self.reg_name + str(phase), action)
+                self.record(self.reg_name + str(phase), action, time)
+            if record is not None:
+                self.record(self.reg_name + str(phase), record, time)
+
+    def scaling_based_control(self, circuit, tap_ratio: dict) -> int:
         for reg, ratio in tap_ratio.items():
             circuit.Transformers.Name = reg
             circuit.Transformers.Wdg = 2
 
             old_tap_ratio = circuit.Transformers.Tap
-            new_tap = np.round((old_tap_ratio * ratio - 1) / self.tap_width[reg])
-            new_tap_ratio = 1 + new_tap * self.tap_width[reg]
+            new_tap_ratio = old_tap_ratio * ratio
+            new_tap_ratio = max(self.tap_ratio_limit[reg][0], new_tap_ratio)
+            new_tap_ratio = min(self.tap_ratio_limit[reg][1], new_tap_ratio)
 
-            new_tap_ratio = max(self.tap_limit[reg][0], new_tap_ratio)
-            new_tap_ratio = min(self.tap_limit[reg][1], new_tap_ratio)
+            new_tap = self.ratio2tap(ratio=new_tap_ratio, reg=reg)
+            return new_tap
 
-            circuit.Transformers.Tap = new_tap_ratio
-            new_tap = np.round((new_tap_ratio - 1) / self.tap_width[reg])
-            self.record(reg, new_tap, time)
+    def supervised_learning_control(self, phase: int, observation:np.ndarray) -> int:
+        return int(self.controller[phase]['model'].predict(observation))
 
-    def record(self, reg, tap, time):
+    def record(self, reg: str, tap: int, time: int):
         self.transformerTap[reg][time] = tap
-        if reg in self.last_observe.keys():
-            self.transformerTap[reg][self.last_observe[reg] + 1: time] = self.transformerTap[reg][self.last_observe[reg]]
+
+        if time > self.last_observe[reg] + 1:
+            self.transformerTap[reg][self.last_observe[reg] + 1: time] = \
+                self.transformerTap[reg][self.last_observe[reg]]
         self.last_observe[reg] = time
 
-    def record_auto_tap(self, dss: DSS, rc:DirectRecord):
-        for x, handle in dss.transformer_dict.items():
-            if self.reg_name in x:
-                if rc.current_step == 0:
-                    self.transformerTap[x] = np.zeros(rc.total_step)
-                dss.circuit.Transformers.Name = x
-                dss.circuit.Transformers.Wdg = 2
-                tap_ratio = dss.circuit.Transformers.Tap
-                self.transformerTap[x][rc.current_step] = (tap_ratio - 1) / self.tap_width[x]
+    def get_auto_tap(self, circuit, phase: int):
+        reg = self.reg_name + str(phase)
+        circuit.Transformers.Name = reg
+        circuit.Transformers.Wdg = 2
+        tap_ratio = circuit.Transformers.Tap
+
+        return self.ratio2tap(tap_ratio, reg=reg)
 
     def plot(self, reg=None):  # TODO: selective plotting
         fig, axes = plt.subplots(len(self.transformerTap), 1)
@@ -287,5 +389,4 @@ class RegulatorControl:
 
     @staticmethod
     def get_trained_supervised_model(path:str):
-
-        selector =
+        return joblib.load(path)

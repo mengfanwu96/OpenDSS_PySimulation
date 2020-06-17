@@ -37,7 +37,7 @@ class DSS:
         self.monitor_dict = {}
         self.pv_dict = {}
         self.storage_dict = {}
-        name_module_mapping = {
+        self.name_module_mapping = {
             "Transformer": self.transformer_dict,
             "RegControl": self.regcontrol_dict,
             "Load": self.load_dict,
@@ -50,12 +50,13 @@ class DSS:
         }
         for idx, elem in enumerate(elem_list):
             class_name, elem_name = elem.split('.')
-            if class_name in name_module_mapping.keys():
-                name_module_mapping[class_name][elem_name] = idx
+            if class_name in self.name_module_mapping.keys():
+                self.name_module_mapping[class_name][elem_name] = idx
 
         self.line_class_dict = {}
         for name in self.line_dict.keys():
             self.line_class_dict[name] = Line(self, name)
+    # TODO: a function to extract the phase of elements
 
     def release_com(self):
         del self.solution
@@ -70,12 +71,20 @@ class DSS:
         return None
 
     def find_regulator(self):
+        regs = {}
         for x, id in self.transformer_dict.items():
             if '1' in x or '2' in x or '3' in x:
                 num_phase = int(self.circuit.CktElements(id).NumPhases)
                 if num_phase == 1:
-                    reg_name = re.split('([123])', x)
-                    return reg_name[0]
+                    reg_name = re.split('([123])', x)[0]
+                    if reg_name in regs.keys():
+                        regs[reg_name] += 1
+                    else:
+                        regs[reg_name] = 1
+
+        for name, num in regs.items():
+            if num == 3:
+                return name
 
 
 class Line:

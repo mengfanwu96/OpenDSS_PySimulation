@@ -1,0 +1,11 @@
+{
+  "root": "C:/Users/chmewu/OpenDSS_PySimulation/",
+  "data_dir": "/data/supervised_learning/data/",
+  "model_dir": "/data/supervised_learning/model/",
+  "raw": "extracted.pkl",
+  "window": 10,
+  "shift": 5,
+  "metric_ratio": 2,
+  "cross_validation": true,
+  "fold_number": 8
+}

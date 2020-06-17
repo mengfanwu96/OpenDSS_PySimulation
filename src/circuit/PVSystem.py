@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import os
 
+
 class PVSystem:
     def __init__(self, dss:DSS, num_steps, cloud_cover=None):
         if len(dss.pv_dict.keys()) != 0:
@@ -93,7 +94,7 @@ class PVSystem:
             cplx_power = circuit.ActiveCktElement.Powers
             for i in range(len(phase_list)):
                 self.power_log[x][phase_list[i]][time_step] = -complex(float(cplx_power[i]), float(cplx_power[i+1]))
-                # TODO: modify the previous complex number logging
+                # TODO: modify the previous complex number logging, directly using function: complex()
 
     def plot_pv(self, pv_list=None):
         # TODO: selective plotting

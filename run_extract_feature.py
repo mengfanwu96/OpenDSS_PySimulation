@@ -31,7 +31,7 @@ if __name__ == '__main__':
                              phase=phase,
                              mode=mode)
 
-        sim.add_observation_at_bus(observation_loc)
+        # sim.add_observation_at_bus(observation_loc)
         data = sim.extract()
 
         with open(root + storage_path + "extracted.pkl", "wb") as output:

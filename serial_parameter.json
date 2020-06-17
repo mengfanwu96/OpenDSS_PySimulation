@@ -8,16 +8,11 @@
       "step": "1m",
       "cap_control": "none",
       "reg_control": [{
-          "base_loc": "670.1.2.3",
-          "mode": "inside",
-          "interval": "10m",
-          "shift": "5m"
-        }, {
-          "base_loc": "652.3",
+          "base_loc": "652.1",
           "mode": "sl",
           "interval": "10m",
-          "shift": "0m",
-          "model": "/supervised_learning/model/shift_0.pkl"
+          "shift": "8m",
+          "model": "/data/supervised_learning/model/shift_w10_d0.pkl"
       }],
       "with_pv": true
   },
