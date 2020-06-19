@@ -1,0 +1,10 @@
+{
+  "root": "C:/Users/chmewu/OpenDSS_PySimulation/data/supervised_learning/",
+  "data": "/data/extracted.pkl",
+  "model_parameter": {
+      "interval": 10,
+      "shift": [0]
+  },
+  "result_dir": "/best_results/",
+  "metric_ratio": 2
+}

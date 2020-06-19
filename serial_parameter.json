@@ -10,14 +10,15 @@
       "reg_control": [{
           "base_loc": "652.1",
           "mode": "sl",
-          "interval": "10m",
-          "shift": "8m",
-          "model": "/data/supervised_learning/model/shift_w10_d0.pkl"
+          "interval": "5m",
+          "window": "10m",
+          "shift": "0m",
+          "model": "/data/supervised_learning/model/w10_int10_shift_0.pkl"
       }],
       "with_pv": true
   },
   "plot": {
-      "bus": ["670", "684"],
+      "bus": ["684"],
       "reg_tap": true
   }
 }

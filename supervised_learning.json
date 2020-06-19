@@ -1,0 +1,16 @@
+{
+  "root": "C:/Users/chmewu/OpenDSS_PySimulation/",
+  "data_dir": "/data/supervised_learning/data/",
+  "model_dir": "/data/supervised_learning/model/",
+  "window": 10,
+  "interval": 10,
+  "train_shift": [0],
+  "test_shift": [5],
+  "metric_ratio": 2,
+  "feature_selection_number": 41,
+  "feature_selection_criteria": "f_r",
+  "predictor": "MLP",
+  "cross_validation": false,
+  "fold_number": 8,
+  "save_model": true
+}

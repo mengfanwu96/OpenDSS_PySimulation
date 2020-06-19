@@ -113,10 +113,10 @@ class PVSystem:
 
 class Cloud_covering:
     def __init__(self, num_steps, p=0.05, duration_avg=3):
+        np.random.seed(seed=1)
         self.covering = np.random.binomial(1, p, num_steps).astype(float)
         self.num_steps = num_steps
         cloud = np.where(self.covering == 1)[0]
-
         for pos in cloud:
             duration = np.random.chisquare(duration_avg)
             block = int(duration) + 1

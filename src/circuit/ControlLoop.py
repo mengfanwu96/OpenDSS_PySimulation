@@ -3,7 +3,8 @@ from collections import Counter
 from .CircuitComponents import DSS
 from .CircuitRecorder import DirectRecord, RecordNode
 from ..utils.time import *
-from ..supervised_learning.fabricate_features import FabricateFeature
+from ..supervised_learning.fabricating.fabricate_features import FabricateFeature
+from ..supervised_learning.supervised_learning_flow import to_integer_tap
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import KFold
 from sklearn.feature_selection import SelectKBest
@@ -12,11 +13,11 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.pipeline import Pipeline
 import matplotlib.pyplot as plt
-import joblib
+import pickle
 
 
-def not_observe(time: int, window: int, shift: int):
-    return bool( (time - shift) % window )
+def not_observe(time: int, interval: int, shift: int):
+    return bool( (time - shift) % interval )
 
 
 class CapacitorControl:
@@ -200,12 +201,13 @@ class RegulatorControl:
                     self.controller[i] = {'bus': bus,
                                           'mode': p['mode'],
                                           'interval': get_steps(p['interval'], self.step_size),
+                                          'window': get_steps(p['window'], self.step_size),
                                           'shift': get_steps(p['shift'], self.step_size, pos=False)}
                     self.controller[i]['shift'] %= self.controller[i]['interval']
                     if self.controller[i]['mode'] == 'sl':
                         assert 'model' in p.keys(), "Supervised-learning model not found!"
                         self.controller[i]['model'] = self.get_trained_supervised_model(self.root + p['model'])
-                        self.controller[i]['feature_fabricator'] = FabricateFeature(self.controller[i]['interval'])
+                        self.controller[i]['feature_fabricator'] = FabricateFeature(self.controller[i]['window'])
 
     def get_active_auto_control(self):
         res = []
@@ -356,8 +358,9 @@ class RegulatorControl:
             new_tap = self.ratio2tap(ratio=new_tap_ratio, reg=reg)
             return new_tap
 
-    def supervised_learning_control(self, phase: int, observation:np.ndarray) -> int:
-        return int(self.controller[phase]['model'].predict(observation))
+    def supervised_learning_control(self, phase: int, observation: np.ndarray) -> int:
+        new_tap = to_integer_tap(self.controller[phase]['model'].predict(observation))
+        return int(new_tap)
 
     def record(self, reg: str, tap: int, time: int):
         self.transformerTap[reg][time] = tap
@@ -389,4 +392,5 @@ class RegulatorControl:
 
     @staticmethod
     def get_trained_supervised_model(path:str):
-        return joblib.load(path)
+        with open(path, 'rb') as r:
+            return pickle.load(r)
