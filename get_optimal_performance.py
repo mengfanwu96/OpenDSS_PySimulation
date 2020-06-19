@@ -56,7 +56,7 @@ class BestActionPerformance:
     
     
 if __name__ == "__main__":
-    with open('get_optimal_performance.json') as r:
+    with open('parameter_setting/get_optimal_performance.json') as r:
         par = json.load(r)
         root = par['root']
         data_path = root + par['data']

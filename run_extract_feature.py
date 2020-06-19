@@ -8,7 +8,7 @@ if __name__ == '__main__':
     sim = None
 
     # loading simulation parameters
-    with open("ExtractFeature_parameter.json") as par:
+    with open("parameter_setting/ExtractFeature_parameter.json") as par:
         pars = json.load(par)
         sim_pars = pars['simulation_parameter']
         root = pars['root']

@@ -7,7 +7,7 @@ if __name__ == '__main__':
     sim = None
 
     # loading simulation parameters
-    with open("serial_parameter.json") as par:
+    with open("parameter_setting/serial_parameter.json") as par:
         pars = json.load(par)
         sim_pars = pars['simulation_parameter']
         to_plot = pars['plot']

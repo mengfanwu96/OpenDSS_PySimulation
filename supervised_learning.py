@@ -2,7 +2,7 @@ import json
 from src.supervised_learning.supervised_learning_flow import SupervisedLearning
 
 # load parameters
-with open("supervised_learning.json") as par:
+with open("parameter_setting/supervised_learning.json") as par:
     pars = json.load(par)
     root = pars['root']
     cross_validation = pars['cross_validation']
