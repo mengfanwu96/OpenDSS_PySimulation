@@ -8,11 +8,11 @@ class LoadVariation:
     def __init__(self, load_list, root: str, profile_path='/profiles/Daily_1min_100profiles'):
         self.load_time_series = {}
         self.std_load = {}
-
+        self.profile_disturb = 10
         abs_profile_path = root + profile_path
 
         for idx, load_name in enumerate(load_list):
-            with open(abs_profile_path + '/load_profile_%s.txt' % (idx + 1)) as reader:
+            with open(abs_profile_path + '/load_profile_%s.txt' % (idx + 1 + self.profile_disturb)) as reader:
                 loads = reader.readlines()
                 self.load_time_series[load_name] = np.array([float(x) for x in loads])
         self.load_list = list(load_list)

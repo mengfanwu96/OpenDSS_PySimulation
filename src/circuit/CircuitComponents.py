@@ -101,6 +101,7 @@ class Line:
         if len(self.phase_idx) == 0 and self.phase_num == 3:
             self.phase_idx = [0, 1, 2]
 
+
 class Bus:
     def __init__(self, dss: DSS, name, handle):
         self.name = name

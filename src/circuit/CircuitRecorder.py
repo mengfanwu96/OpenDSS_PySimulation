@@ -79,7 +79,8 @@ class DirectRecord:
             ax[phase_idx].set_title("Phase %s" % (phase_idx+1))
         fig.show()
 
-    def stat_analysis(self, data):
+    @staticmethod
+    def stat_analysis(data):
         res = {}
         res['avg'] = np.average(data)
         res['std'] = np.std(data)
@@ -103,6 +104,8 @@ class RecordNode:
     def fetch(self, dss, phase):
         vidx, cidx, length = self.get_index_for_vector(phase)
         r = np.zeros((2, length), dtype=complex)
+        # dim1: v, c
+        # dim2: each phase
 
         dss.circuit.SetActiveBus(self.node.name)
         voltage_vec = np.array(dss.circuit.ActiveBus.puVoltages)

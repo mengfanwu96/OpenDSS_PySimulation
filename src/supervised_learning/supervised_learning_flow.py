@@ -15,13 +15,13 @@ from sklearn.preprocessing import MinMaxScaler
 from .fabricating.fabricate_features import Fabricator, FabricateFeature, name_generator
 
 
-def get_data(window, interval, shift, path, prefix='fabricated', par=False):
+def get_data(window, interval, shift, path, prefix='fabricated', extract_par=False):
     # first object is the pd DataFrame
     # second object is the parameter info
     name = name_generator(window, interval, shift, 'pkl', prefix)
     with open(path + name, 'rb') as r:
         data = pickle.load(r)
-        if par:
+        if extract_par:
             data = tuple([data, pickle.load(r)])
     return data
 
@@ -121,7 +121,7 @@ class SupervisedLearning:
     def cross_validation(self, k=8):
         data, self.feature_fabrication_pars = get_data(self.window, self.interval,
                                                        self.train_shift[0], self.data_path,
-                                                       par=True)
+                                                       extract_par=True)
 
         self.feature_names = get_feature_names(data, self.label_name)
         features = data[self.feature_names]
@@ -151,7 +151,7 @@ class SupervisedLearning:
         for idx, shift in enumerate(self.train_shift):
             # data = pd.read_csv(data_path + "fabricated_w%s_int%s_d%s.csv" % (window, interval, shift))
             data, self.feature_fabrication_pars = get_data(self.window, self.interval,
-                                                          shift, self.data_path, par=True)
+                                                          shift, self.data_path, extract_par=True)
             if idx:
                 train_data.append(data)
             else:

@@ -190,6 +190,9 @@ class RegulatorControl:
                 none_mode = {'mode': 'none'}
                 if self.check_controller_to_write(i, none_mode):
                     self.controller[i] = none_mode
+        elif p['mode'] == 'direct':
+            if self.check_controller_to_write(p['phase'], p):
+                self.controller[p['phase']] = p
         else:
             bus_phase = p['base_loc'].split('.')
             bus = bus_phase[0]
@@ -205,16 +208,20 @@ class RegulatorControl:
                                           'shift': get_steps(p['shift'], self.step_size, pos=False)}
                     self.controller[i]['shift'] %= self.controller[i]['interval']
                     if self.controller[i]['mode'] == 'sl':
+                        # TODO: bus key is not needed here
                         assert 'model' in p.keys(), "Supervised-learning model not found!"
-                        self.controller[i]['model'] = self.get_trained_supervised_model(self.root + p['model'])
+                        self.controller[i]['model'], self.controller[i]['feature_fabrication_pars'] = \
+                            self.get_trained_supervised_model(self.root + p['model'])
                         self.controller[i]['feature_fabricator'] = FabricateFeature(self.controller[i]['window'])
 
     def get_active_auto_control(self):
-        res = []
+        enable = []
+        disable = [1, 2, 3]
         for phase, controller in self.controller.items():
             if controller['mode'] == 'auto':
-                res.append(phase)
-        return res
+                enable.append(phase)
+                disable.remove(phase)
+        return enable, disable
 
     def remove_none_controller(self):
         to_delete = []
@@ -229,7 +236,10 @@ class RegulatorControl:
 
     def add_node_recorder(self, dss: DSS, rc: DirectRecord):
         for phase, controller in self.controller.items():
-            if controller['mode'] == 'inside' or controller['mode'] == 'sl':
+            if controller['mode'] == 'sl':
+                for bus in controller['feature_fabrication_pars']["bus_phase"]:
+                    rc.add_node_recorder(dss, bus)
+            elif controller['mode'] == 'inside':
                 rc.add_node_recorder(dss, controller['bus'])
 
     def check_controller_to_write(self, phase: int, new_setting: dict):
@@ -252,10 +262,10 @@ class RegulatorControl:
                 self.register_tap_parameter(x, minTap, maxTap, tap_num)
 
     def register_tap_parameter(self, reg, min_tap, max_tap, tap_num):
-            self.tap_ratio_limit[reg] = [min_tap, max_tap]
-            width = (max_tap - min_tap) / tap_num
-            self.tap_width[reg] = width
-            self.tap_num_range[reg] = [np.round((Tap - 1) / width).astype(int) for Tap in self.tap_ratio_limit[reg]]
+        self.tap_ratio_limit[reg] = [min_tap, max_tap]
+        width = (max_tap - min_tap) / tap_num
+        self.tap_width[reg] = width
+        self.tap_num_range[reg] = [np.round((Tap - 1) / width).astype(int) for Tap in self.tap_ratio_limit[reg]]
 
     def set_tap_parameter(self, dss: DSS, phase, num_taps: int, max_tap: float = 1.1, min_tap: float = 0.9):
         phase_list = list(phase)
@@ -306,17 +316,31 @@ class RegulatorControl:
             elif controller['mode'] == 'inside':
                 a = self.observe_node_power(controller['bus'], phase, rc)
             elif controller['mode'] == 'sl':
-                a = self.get_sl_feature(controller['bus'], phase, rc)
+                a = self.get_sl_feature(controller['feature_fabrication_pars']["bus_phase"], rc,
+                                        controller['feature_fabricator'])
             observation[phase] = a
         return observation
 
-    def get_sl_feature(self, bus:str, phase:int, rc: DirectRecord):
-        v_vector = rc.bus_voltages[bus][phase - 1, :]
-        c_vector = rc.line_currents[rc.node_recorder[bus].line.name][phase - 1, :]
-        tap = self.transformerTap[self.reg_name + str(phase)][rc.current_step - 1]
-        fv = self.controller[phase]['feature_fabricator'].fabricate_feature_vector(v_vector, c_vector, rc.current_step, tap)
+    def get_sl_feature(self, bus_phase: dict, rc: DirectRecord, fabricator: FabricateFeature):
+        fv = []
+        for bus, phase in bus_phase.items():
+            phase_list = None
+            if phase == 'all':
+                phase_list = list(rc.bus_phase[bus])
+            else:
+                assert type(phase) is list, "Phase for extracting features should be in list."
+                phase_list = phase
 
-        return fv
+            for i in phase_list:
+                v_vector = rc.bus_voltages[bus][i-1, :]
+                c_vector = rc.line_currents[rc.node_recorder[bus].line.name][i-1, :]
+                fv.append(fabricator.fabricate_feature_vector(v_vector, c_vector, rc.current_step))
+                if fv[-1] is None:
+                    return None
+        overall_f = tuple([v for v in fv] + [np.array([rc.current_step]).reshape(1, -1)])
+        feature = np.hstack(overall_f)
+
+        return feature
 
     def observe_node_power(self, bus: str, phase: int, rc: DirectRecord):
         tap_ratio = {}
@@ -385,12 +409,15 @@ class RegulatorControl:
 
         for idx, (x, data) in enumerate(self.transformerTap.items()):
             axes[idx].plot(data)
+            axes[idx].set_ylim(self.tap_num_range[x][0], self.tap_num_range[x][1])
             axes[idx].set_xlabel('time')
-            axes[idx].set_ylabel('controller Tap')
+            axes[idx].set_ylabel('controller Tap of %s' % x)
 
         fig.show()
 
     @staticmethod
     def get_trained_supervised_model(path:str):
         with open(path, 'rb') as r:
-            return pickle.load(r)
+            model = pickle.load(r)
+            feature_fabrication_pars = pickle.load(r)
+            return model, feature_fabrication_pars

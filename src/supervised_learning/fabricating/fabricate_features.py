@@ -17,6 +17,18 @@ def name_generator(window, interval, shift, suffix: str, prefix: str = None):
     return name + '.' + suffix
 
 
+def get_bus_phase(bus: str):
+    bus_loc = bus.split('.')
+    rd = {}
+    if len(bus_loc) == 1:
+        rd[bus_loc[0]] = 'all'
+    else:
+        rd[bus_loc[0]] = []
+        for i in range(1, len(bus_loc)):
+            rd[bus_loc[0]].append(int(bus_loc[i]))
+    return rd
+
+
 metric = [lambda y: np.abs(np.mean(y) - 1), np.std]
 metric_ratio = 2
 
@@ -31,7 +43,7 @@ class FabricateFeature:
         self.c_angle_feature_name = ['phi%s' % i for i in range(window)]
 
         self.feature_names = self.v_feature_name + self.c_feature_name + \
-                             self.v_angle_feature_name + self.c_angle_feature_name + ['tap']
+                             self.v_angle_feature_name + self.c_angle_feature_name
         self.metric = metric
         self.metric_ratio = metric_ratio
 
@@ -46,7 +58,7 @@ class FabricateFeature:
         # Add baz back since it doesn't exist in the pickle
         self.metric = [lambda y: np.abs(np.mean(y) - 1), np.std]
 
-    def fabricate_feature_vector(self, v, c, final_step:int, current_tap: int):
+    def fabricate_feature_vector(self, v, c, final_step:int, **kwargs):
         if final_step - self.window < 0:
             return None
         v_vector = np.abs(v[final_step - self.window: final_step])
@@ -54,7 +66,11 @@ class FabricateFeature:
         theta_vector = np.angle(v[final_step - self.window: final_step])
         phi_vector = np.angle(c[final_step - self.window: final_step])
 
-        return np.concatenate((v_vector, c_vector, theta_vector, phi_vector, np.array([current_tap]))).reshape(1, -1)
+        tap = kwargs.get('current_tap')
+        if tap is not None:
+            return np.concatenate((v_vector, c_vector, theta_vector, phi_vector, np.array([tap]))).reshape(1, -1)
+        else:
+            return np.concatenate((v_vector, c_vector, theta_vector, phi_vector)).reshape(1, -1)
 
     def get_metric_stat(self, v: np.ndarray, start: int, end: int):
         metric_v = v[start: end]
@@ -79,18 +95,24 @@ class Fabricator:
     def __init__(self, data: dict, metric_ratio):
         self.data = data
         self.metric_ratio = metric_ratio
-        self.total_step = list(data.values())[0].shape[1]
+        self.total_step = list(list(data.get(0).values())[0].values())[0].shape[1]
         self.class_num = len(data)
         self.feature_extractor = None
         self.output = None
+        self.observe_bus_phase = {}
+        self.eval_bus = None
+        self.eval_phase = None
 
     def __getstate__(self):
         state = self.__dict__.copy()
         del state["data"]
         return state
 
-    def fabricate(self, window: int, shift: int, storage_path: str, **kwargs):
-        interval = window if 'interval' not in kwargs.keys() else kwargs['interval']
+    def fabricate(self, window: int, shift: int, bus: list, eval_loc: str, **kwargs):
+        interval = kwargs.get('interval')
+        if interval is None:
+            interval = window
+
         self.feature_extractor = FabricateFeature(window=window, metric_ratio=metric_ratio)
 
         segment = int((self.total_step - shift) / interval)
@@ -102,7 +124,23 @@ class Fabricator:
         features = []
         stat_dict = {key: [] for key in data.keys()}
 
+        self.observe_bus_phase = {}
+        for x in bus:
+            self.observe_bus_phase.update(get_bus_phase(x))
+
+        eval_bus_phase = get_bus_phase(eval_loc)
+        self.observe_bus_phase.update(eval_bus_phase)
+
+        assert len(eval_bus_phase) == 1, "Currently support only evaluating at one node."
+        for i, phases in eval_bus_phase.items():
+            self.eval_bus = i
+            assert len(phases) == 1, "Currently support only evaluating at one phase."
+            self.eval_phase = phases[0]
+
+
         valid_segment = None
+        get_feature_names = True
+        feature_names = []
         for tap, time_series in data.items():
             valid_segment = 0
             for i in range(1, segment):
@@ -113,20 +151,53 @@ class Fabricator:
                     continue
 
                 # feature vector is of window size
-                feature_v = self.feature_extractor.fabricate_feature_vector(time_series[0, :], time_series[1, :], start, tap)
+                overall_feature = []
+                for bus, phase in self.observe_bus_phase.items():
+                    phase_list = None
+                    if phase == 'all':
+                        phase_list = list(time_series[bus].keys())
+                    else:
+                        assert type(phase) is list, "Phase for extracting features should be in list."
+                        phase_list = phase
 
-                if feature_v is None:
+                    for i in phase_list:
+                        phase_v = time_series[bus][i]
+                        overall_feature.append(
+                            self.feature_extractor.fabricate_feature_vector(
+                                phase_v[0, :], phase_v[1, :], start
+                            )
+                        )
+                        if get_feature_names:
+                            feature_names.append(
+                                [(bus + "." + str(i) + str(fn)) \
+                                for fn in self.feature_extractor.feature_names])
+
+                phase_v = time_series[self.eval_bus][self.eval_phase]
+                # overall_feature.append(
+                #     self.feature_extractor.fabricate_feature_vector(
+                #         phase_v[0, :], phase_v[1, :], start, current_tap=tap
+                #     )
+                # )
+                # if get_feature_names:
+                #     feature_names.append(
+                #         [(self.eval_bus + "." + str(self.eval_phase) + str(fn)) \
+                #         for fn in self.feature_extractor.feature_names] + ['tap'])
+
+                get_feature_names = False
+                if overall_feature[0] is None:
                     continue
-                features.append(np.concatenate((feature_v,\
-                                                np.array(valid_segment + self.class_num).reshape(1, 1)), axis=1))
+                feature_arr_list = [v for v in overall_feature] + [np.array([tap, valid_segment + self.class_num]).reshape(1, -1)]
+                step_feature = np.hstack(tuple(feature_arr_list))
+                features.append(step_feature)
                 valid_segment += 1
 
                 # evaluation vector is of interval size
-                stat_dict[tap].append(self.feature_extractor.get_metric_stat(time_series[0, :], start, end))
+                stat_dict[tap].append(self.feature_extractor.get_metric_stat(phase_v[0, :], start, end))
 
         num_points = len(features)
         features = np.array(features).reshape(num_points, -1)
-        feature_pd = pd.DataFrame(data=features, columns=self.feature_extractor.feature_names + ['label'])
+        feature_names = np.concatenate((np.hstack(feature_names), np.array(['tap', 'label'])))
+        feature_pd = pd.DataFrame(data=features, columns=feature_names)
 
         for i in range(valid_segment):
             min_value = 1e6
@@ -150,13 +221,22 @@ if __name__ == '__main__':
         metric_ratio = pars['metric_ratio']
         raw_data_path = data_path + pars['raw']
 
+        observe_loc = pars['bus']
+        eval_loc = pars['eval_loc']
+
         with open(raw_data_path, "rb") as read:
             data = pickle.load(read)
             fabricator = Fabricator(data, metric_ratio)
 
             for s in shift:
-                fabricator.fabricate(window, s, data_path, interval=interval)
-                to_save = [fabricator.output, {"window": window, "shift": s, "interval": interval}]
+                fabricator.fabricate(window=window,
+                                     shift=s,
+                                     bus=observe_loc,
+                                     eval_loc=eval_loc,
+                                     interval=interval)
+                to_save = [fabricator.output, {"window": window, "shift": s, "interval": interval,
+                                               "bus_phase": fabricator.observe_bus_phase}]
                 with open(data_path + name_generator(window, interval, s, 'pkl', prefix='fabricated'), 'wb') as w:
                     for i in to_save:
                         pickle.dump(i, w)
+

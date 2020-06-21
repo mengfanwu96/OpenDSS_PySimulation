@@ -12,13 +12,13 @@
           "mode": "sl",
           "interval": "5m",
           "window": "10m",
-          "shift": "0m",
-          "model": "/data/supervised_learning/model/w10_int10_shift_0.pkl"
+          "shift": "8m",
+          "model": "data/supervised_learning/model/w10_int10_shift_0_2_4_6.pkl"
       }],
       "with_pv": true
   },
   "plot": {
-      "bus": ["684"],
+      "bus": ["684", "652", "671"],
       "reg_tap": true
   }
 }
