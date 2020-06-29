@@ -1,0 +1,20 @@
+ {        "base_loc": "652.1",
+          "mode": "sl",
+          "interval": "10m",
+          "shift": "0m",
+          "model": "/data/supervised_learning/model/shift_w10_d0.pkl"
+      }
+{
+	  "base_loc": "670.2.3",
+          "mode": "inside",
+          "interval": "1m",
+          "shift": "5m"
+        }
+
+{
+          "base_loc": "652.1",
+          "mode": "sl",
+          "interval": "10m",
+          "shift": "8m",
+          "model": "/data/supervised_learning/model/w10_int10_shift_0.pkl"
+      }

@@ -8,7 +8,8 @@ class LoadVariation:
     def __init__(self, load_list, root: str, profile_path='/profiles/Daily_1min_100profiles'):
         self.load_time_series = {}
         self.std_load = {}
-        self.profile_disturb = 10
+        self.profile_disturb = 30
+        # TODO: move into json
         abs_profile_path = root + profile_path
 
         for idx, load_name in enumerate(load_list):

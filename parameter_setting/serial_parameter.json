@@ -9,16 +9,17 @@
       "cap_control": "none",
       "reg_control": [{
           "base_loc": "652.1",
+          "phase": 1,
           "mode": "sl",
-          "interval": "5m",
+          "interval": "10m",
           "window": "10m",
-          "shift": "8m",
-          "model": "data/supervised_learning/model/w10_int10_shift_0_2_4_6.pkl"
+          "shift": "5m",
+          "model": "data/supervised_learning/model/w10_int10_shift_0.pkl"
       }],
       "with_pv": true
   },
   "plot": {
-      "bus": ["684", "652", "671"],
-      "reg_tap": true
+      "bus": ["652"],
+      "reg_tap": false
   }
 }

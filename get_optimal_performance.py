@@ -1,9 +1,10 @@
 import numpy as np
 import pandas as pd
-from src.supervised_learning.fabricating.fabricate_features import metric, name_generator
 import json
 import pickle
 import matplotlib.pyplot as plt
+from src.supervised_learning.fabricating.fabricate_features import metric, name_generator, metric_ratio
+from src.circuit.CircuitRecorder import stat_analysis
 
 
 class BestActionPerformance:
@@ -80,12 +81,17 @@ if __name__ == "__main__":
                     pickle.dump(time_series, w)
                     pickle.dump(taps, w)
 
+                res = stat_analysis(np.abs(time_series))
+
                 fig, axes = plt.subplots(2, 1)
                 fig.suptitle("Shift %s, interval %s" % (s, interval), y=1)
                 axes[0].plot(np.abs(time_series))
                 axes[0].set_ylim(0.87, 1.13)
                 axes[0].set_xlabel('time')
                 axes[0].set_ylabel('voltage')
+
+                axes[0].set_title("optimal result of shift %s: eval=%s, #extrem%s" %\
+                                  (s, res['avg'] + metric_ratio * res['std'], res['ext']))
                 axes[1].plot(taps)
                 axes[1].set_ylim(-17, +17)
                 axes[1].set_xlabel('time')

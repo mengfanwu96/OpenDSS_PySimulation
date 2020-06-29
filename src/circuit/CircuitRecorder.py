@@ -62,9 +62,10 @@ class DirectRecord:
 
             for idx, ax in enumerate(axes):
                 data = v_amp[idx, :]
-                stat = self.stat_analysis(data)
+                stat = stat_analysis(data)
                 ax.set_ylim(0.87, 1.13)
                 ax.plot(data)
+                print('Bus ' + bus_name + ': ' + str(stat['avg'] - 1 + 2 * stat['std']))
                 ax.set_title("Phase %s, avg %.2f, std %.2f extreme %s" %
                              (self.bus_phase[bus_name][idx], stat['avg'], stat['std'], stat['ext']))
             # plt.show()
@@ -79,17 +80,15 @@ class DirectRecord:
             ax[phase_idx].set_title("Phase %s" % (phase_idx+1))
         fig.show()
 
-    @staticmethod
-    def stat_analysis(data):
-        res = {}
-        res['avg'] = np.average(data)
-        res['std'] = np.std(data)
-        extreme_point_1 = data > 1.05
-        extreme_point_2 = data < 0.95
-        a = Counter(extreme_point_1)[True]
-        b = Counter(extreme_point_2)[True]
-        res['ext'] = a + b
-        return res
+
+def stat_analysis(data):
+    res = {'avg': np.average(data), 'std': np.std(data)}
+    extreme_point_1 = data > 1.05
+    extreme_point_2 = data < 0.95
+    a = Counter(extreme_point_1)[True]
+    b = Counter(extreme_point_2)[True]
+    res['ext'] = a + b
+    return res
 
 
 class RecordNode:

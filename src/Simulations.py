@@ -57,8 +57,8 @@ class Simulation:
 
         for ele_dict in elem_list:
             for x, id in ele_dict.items():
-                print("Name of elements in dictionary: %s" % x)
-                print(self.d.circuit.CktElements(id).Name + " " + output_str)
+                # print("Name of elements in dictionary: %s" % x)
+                # print(self.d.circuit.CktElements(id).Name + " " + output_str)
                 self.d.circuit.CktElements(id).Enabled = enable
 
     def get_object_dict(self, obj_name: str, phase: list): # TODO: move into circuit (DSS)
